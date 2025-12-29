@@ -17,6 +17,7 @@ type Conditions struct {
 	Counter        *Counter
 	TimeWindow     *TimeWindow
 	PropertyValues map[string]any
+	OfEventType    EventType
 }
 
 type Expression interface {

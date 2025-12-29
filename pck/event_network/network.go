@@ -49,10 +49,10 @@ type EventNetwork interface {
 	// Cousins represent contextual relatedness emerging from shared derivational history rather than direct contribution.
 	Cousins(of EventID, maxDepth int) ([]Event, error)
 
-	// Ancestors of an event are derived events obtained by recursively traversing parents, up to maxDepth.
-	//  - maxDepth = 1 returns direct parents.
-	//Higher depths return parents, grandparents, etc.
-	Ancestors(of EventID, maxDepth int) ([]Event, error)
+	//// Ancestors of an event are derived events obtained by recursively traversing parents, up to maxDepth.
+	////  - maxDepth = 1 returns direct parents.
+	////Higher depths return parents, grandparents, etc.
+	//Ancestors(of EventID, maxDepth int) ([]Event, error)
 
 	// GetByID returns a single event by ID.
 	GetByID(id EventID) (Event, error)
@@ -152,30 +152,30 @@ func (n *InMemoryEventNetwork) Parents(of EventID) ([]Event, error) {
 	return result, nil
 }
 
-func (n *InMemoryEventNetwork) Ancestors(of EventID, maxDepth int) ([]Event, error) {
-	if maxDepth <= 0 {
-		return nil, nil
-	}
-
-	visited := make(map[EventID]bool)
-	var result []Event
-
-	var dfs func(EventID, int)
-	dfs = func(id EventID, depth int) {
-		if depth > maxDepth || visited[id] {
-			return
-		}
-		visited[id] = true
-		for _, edge := range n.out[id] {
-			ev := n.events[edge.To]
-			result = append(result, ev)
-			dfs(edge.From, depth+1)
-		}
-	}
-
-	dfs(of, 1)
-	return result, nil
-}
+//func (n *InMemoryEventNetwork) Ancestors(of EventID, maxDepth int) ([]Event, error) {
+//	if maxDepth <= 0 {
+//		return nil, nil
+//	}
+//
+//	visited := make(map[EventID]bool)
+//	var result []Event
+//
+//	var dfs func(EventID, int)
+//	dfs = func(id EventID, depth int) {
+//		if depth > maxDepth || visited[id] {
+//			return
+//		}
+//		visited[id] = true
+//		for _, edge := range n.out[id] {
+//			ev := n.events[edge.To]
+//			result = append(result, ev)
+//			dfs(edge.From, depth+1)
+//		}
+//	}
+//
+//	dfs(of, 1)
+//	return result, nil
+//}
 
 func (n *InMemoryEventNetwork) Descendants(of EventID, maxDepth int) ([]Event, error) {
 	if maxDepth <= 0 {
@@ -249,16 +249,7 @@ func (n *InMemoryEventNetwork) Siblings(of EventID) ([]Event, error) {
 	parents := n.out[of]
 	seen := make(map[EventID]bool)
 	var result []Event
-	//
-	//for _, p := range parents {
-	//	for _, edge := range n.in[p.To] {
-	//		if edge.From != of && !seen[edge.From] {
-	//			seen[edge.From] = true
-	//			result = append(result, n.events[edge.From])
-	//		}
-	//	}
-	//}
-	//return result, nil
+
 	// CASE 1: Event has derived parents → normal sibling logic
 	if len(parents) > 0 {
 		for _, p := range parents {
@@ -273,14 +264,14 @@ func (n *InMemoryEventNetwork) Siblings(of EventID) ([]Event, error) {
 	}
 
 	// CASE 2: Event has NO parents → collect same-type, parentless peers
-	ev := n.events[of]
+	//ev := n.events[of]
 	for id, candidate := range n.events {
 		if id == of {
 			continue
 		}
-		if candidate.EventType != ev.EventType {
-			continue
-		}
+		//if candidate.EventType != ev.EventType {
+		//	continue
+		//}
 		if len(n.out[id]) == 0 { // no parents
 			seen[id] = true
 			result = append(result, candidate)
@@ -288,6 +279,7 @@ func (n *InMemoryEventNetwork) Siblings(of EventID) ([]Event, error) {
 	}
 
 	return result, nil
+
 }
 
 func (n *InMemoryEventNetwork) GetByID(id EventID) (Event, error) {
