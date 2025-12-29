@@ -2,6 +2,7 @@ package event_network
 
 import (
 	"encoding/json"
+	"fmt"
 	"github.com/stretchr/testify/require"
 
 	"testing"
@@ -46,6 +47,28 @@ func TestInMemoryEventNetwork_GetByID(t *testing.T) {
 	require.Equal(t, event.Properties["level"], "critical")
 }
 
+func TestInMemoryEventNetwork_GetByIDs(t *testing.T) {
+	eventNetwork := NewInMemoryEventNetwork()
+	eventId, err := addCpuStatusChangedEvent(eventNetwork,
+		98.5,
+		"critical")
+	eventId2, err := addCpuStatusChangedEvent(eventNetwork,
+		90,
+		"critical")
+	require.NoError(t, err)
+	events, err := eventNetwork.GetByIDs([]EventID{eventId, eventId2})
+	require.NoError(t, err)
+	require.Equal(t, events[0].EventType, EventType("cpu_status_changed"))
+	require.Equal(t, events[0].EventDomain, EventDomain("infra_domain"))
+	require.Equal(t, events[0].Properties["percentage"], 98.5)
+	require.Equal(t, events[0].Properties["level"], "critical")
+
+	require.Equal(t, events[1].EventType, EventType("cpu_status_changed"))
+	require.Equal(t, events[1].EventDomain, EventDomain("infra_domain"))
+	require.Equal(t, events[1].Properties["percentage"], float64(90))
+	require.Equal(t, events[1].Properties["level"], "critical")
+}
+
 func TestInMemoryEventNetwork_Children(t *testing.T) {
 	network, parentNodes, _ := buildInfraSubGraph(t)
 	PrintEventGraph(network.(*InMemoryEventNetwork))
@@ -83,6 +106,20 @@ func TestInMemoryEventNetwork_Siblings(t *testing.T) {
 	require.Equal(t, len(siblings), 2)
 }
 
+func TestInMemoryEventNetwork_Siblings2(t *testing.T) {
+	network, parents, _ := buildInfraSubGraph(t)
+	siblings, err := network.Siblings(parents.MemoryCriticalID)
+	require.NoError(t, err)
+	require.NotEmpty(t, siblings)
+	fmt.Println(siblings)
+	require.Equal(t, 1, len(siblings))
+
+	//siblings, err = network.Siblings(childs.MemoryEventsIDs[0])
+	//require.NoError(t, err)
+	//require.NotEmpty(t, siblings)
+	//require.Equal(t, len(siblings), 2)
+}
+
 func TestInMemoryEventNetwork_Descendants(t *testing.T) {
 	network, parentNodes, _ := buildInfraSubGraph(t)
 	descendants, err := network.Descendants(parentNodes.ServerNodeChangeStatusID, 1)
@@ -113,7 +150,7 @@ func TestInMemoryEventNetwork_Cousins(t *testing.T) {
 	require.Equal(t, len(cousins), 5)
 }
 
-func TestInMemoryEventNetwork_GetByIDs(t *testing.T) {
+func TestInMemoryEventNetwork_GetByID2(t *testing.T) {
 	eventNetwork := NewInMemoryEventNetwork()
 	event := Event{
 		EventType:   "testType",

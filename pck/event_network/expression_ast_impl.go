@@ -2,6 +2,7 @@ package event_network
 
 import (
 	"errors"
+	"fmt"
 )
 
 /*
@@ -124,6 +125,7 @@ func (e *EventExpression) HasDescendants(eventType string, cond Conditions) *Eve
 }
 
 func (e *EventExpression) HasSiblings(eventType string, cond Conditions) *EventExpression {
+	cond.OfEventType = eventType
 	e.tokens = append(e.tokens, token{
 		kind: tkTerm,
 		term: term{kind: termHasSiblings, eventType: eventType, cond: cond},
@@ -242,7 +244,7 @@ func (e *EventExpression) evalTerm(t term) (bool, []Event, error) {
 		if err != nil {
 			return false, nil, err
 		}
-		return e.applyConditions(sibs, t.eventType, t.cond)
+		return e.applyConditionsForSiblings(sibs, t.cond.OfEventType, t.cond)
 
 	case termHasCousin:
 		max := t.cond.MaxDepth
@@ -295,6 +297,60 @@ func (e *EventExpression) invertedRelationMatch(
 	return e.applyConditions(matched, eventType, cond)
 }
 
+func (e *EventExpression) applyConditionsForSiblings(
+	events []Event,
+	eventType string,
+	cond Conditions,
+) (bool, []Event, error) {
+
+	anchorTS := e.Event.Timestamp
+	matches := 0
+
+	result := []Event{}
+
+	for _, ev := range events {
+		//if eventType != "" && ev.EventType != EventType(eventType) {
+		//	continue
+		//}
+		// disable strict type filter when checking descendants of same type
+		fmt.Println(cond.OfEventType)
+		if ev.EventType != eventType {
+			continue
+		}
+
+		if cond.TimeWindow != nil {
+			d := cond.TimeWindow.TimeUnit.ToDuration(cond.TimeWindow.Within)
+			if ev.Timestamp.Before(anchorTS.Add(-d)) || ev.Timestamp.After(anchorTS) {
+				continue
+			}
+		}
+
+		if cond.PropertyValues != nil {
+			ok := true
+			for k, v := range cond.PropertyValues {
+				if ev.Properties[k] != v {
+					ok = false
+					break
+				}
+			}
+			if !ok {
+				continue
+			}
+		}
+		result = append(result, ev)
+		matches++
+	}
+
+	if cond.Counter != nil {
+		if cond.Counter.HowManyOrMore {
+			return matches >= cond.Counter.HowMany, result, nil
+		}
+		return matches == cond.Counter.HowMany, result, nil
+	}
+
+	return matches > 0, result, nil
+}
+
 func (e *EventExpression) applyConditions(
 	events []Event,
 	eventType string,
@@ -311,8 +367,8 @@ func (e *EventExpression) applyConditions(
 		//	continue
 		//}
 		// disable strict type filter when checking descendants of same type
-		if eventType != "" && eventType != string(e.Event.EventType) {
-			if ev.EventType != EventType(eventType) {
+		if eventType != "" && eventType != e.Event.EventType {
+			if ev.EventType != eventType {
 				continue
 			}
 		}
