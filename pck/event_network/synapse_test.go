@@ -85,5 +85,21 @@ func TestSynapseRuntime_Ingest(t *testing.T) {
 	_, err = synapse.Ingest(lastEvent)
 	require.NoError(t, err)
 
+	_, err = synapse.Ingest(createCpuStatusChangedEvent(91, "critical"))
+	require.NoError(t, err)
+	_, err = synapse.Ingest(createCpuStatusChangedEvent(90, "critical"))
+	require.NoError(t, err)
+	_, err = synapse.Ingest(createCpuStatusChangedEvent(92, "critical"))
+	require.NoError(t, err)
+
+	_, err = synapse.Ingest(createMemoryStatusChangedEvent(70, "critical"))
+	require.NoError(t, err)
+	_, err = synapse.Ingest(createMemoryStatusChangedEvent(75, "critical"))
+	require.NoError(t, err)
+	// break down fot eaisier dubugging.
+	lastEvent = createMemoryStatusChangedEvent(80, "critical")
+	_, err = synapse.Ingest(lastEvent)
+	require.NoError(t, err)
+
 	PrintEventGraph(synapse.GetNetwork())
 }
