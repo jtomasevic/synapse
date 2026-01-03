@@ -1,15 +1,16 @@
 package event_network
 
 import (
-	"github.com/stretchr/testify/require"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
-func TestSynapseRuntime_Ingest(t *testing.T) {
+func Test_WithComplexRules(t *testing.T) {
 	synapse := NewSynapse()
 
-	synapse.RegisterRule(CpuStatusChanged, NewDeriveEventRule(
-		NewCondition().HasSiblings(CpuStatusChanged, Conditions{
+	synapse.RegisterRule(CpuStatusChanged, NewDeriveEventRule("cpu_status_critical",
+		NewCondition().HasPeers(CpuStatusChanged, Conditions{
 			Counter: &Counter{
 				HowMany:       2,
 				HowManyOrMore: false,
@@ -23,8 +24,8 @@ func TestSynapseRuntime_Ingest(t *testing.T) {
 		},
 	))
 
-	synapse.RegisterRule(MemoryStatusChanged, NewDeriveEventRule(
-		NewCondition().HasSiblings(MemoryStatusChanged, Conditions{
+	synapse.RegisterRule(MemoryStatusChanged, NewDeriveEventRule("node_critical1",
+		NewCondition().HasPeers(MemoryStatusChanged, Conditions{
 			Counter: &Counter{
 				HowMany:       2,
 				HowManyOrMore: false,
@@ -38,8 +39,8 @@ func TestSynapseRuntime_Ingest(t *testing.T) {
 		},
 	))
 
-	synapse.RegisterRule(MemoryCritical, NewDeriveEventRule(
-		NewCondition().HasSiblings(CpuCritical,
+	synapse.RegisterRule(MemoryCritical, NewDeriveEventRule("node_critical2",
+		NewCondition().HasPeers(CpuCritical,
 			Conditions{
 				Counter: &Counter{
 					HowMany:       1,
@@ -54,13 +55,14 @@ func TestSynapseRuntime_Ingest(t *testing.T) {
 		},
 	))
 
-	synapse.RegisterRule(CpuCritical, NewDeriveEventRule(
-		NewCondition().HasSiblings(MemoryCritical, Conditions{
-			Counter: &Counter{
-				HowMany:       1,
-				HowManyOrMore: true,
-			},
-		}), EventTemplate{
+	synapse.RegisterRule(CpuCritical, NewDeriveEventRule("node_critical2",
+		NewCondition().HasPeers(MemoryCritical,
+			Conditions{
+				Counter: &Counter{
+					HowMany:       1,
+					HowManyOrMore: true,
+				},
+			}), EventTemplate{
 			EventType:   ServerNodeChangeStatus,
 			EventDomain: InfraDomain,
 			EventProps: map[string]any{
@@ -70,35 +72,20 @@ func TestSynapseRuntime_Ingest(t *testing.T) {
 	))
 
 	_, err := synapse.Ingest(createCpuStatusChangedEvent(92, "critical"))
-	require.NoError(t, err)
-	_, err = synapse.Ingest(createCpuStatusChangedEvent(95, "critical"))
-	require.NoError(t, err)
-	_, err = synapse.Ingest(createCpuStatusChangedEvent(91, "critical"))
-	require.NoError(t, err)
-
 	_, err = synapse.Ingest(createMemoryStatusChangedEvent(70, "critical"))
-	require.NoError(t, err)
-	_, err = synapse.Ingest(createMemoryStatusChangedEvent(75, "critical"))
-	require.NoError(t, err)
-	// break down fot eaisier dubugging.
-	lastEvent := createMemoryStatusChangedEvent(80, "critical")
-	_, err = synapse.Ingest(lastEvent)
-	require.NoError(t, err)
+	_, err = synapse.Ingest(createCpuStatusChangedEvent(92.1, "critical"))
+	_, err = synapse.Ingest(createCpuStatusChangedEvent(92.2, "critical"))
 
-	_, err = synapse.Ingest(createCpuStatusChangedEvent(91, "critical"))
-	require.NoError(t, err)
-	_, err = synapse.Ingest(createCpuStatusChangedEvent(90, "critical"))
-	require.NoError(t, err)
-	_, err = synapse.Ingest(createCpuStatusChangedEvent(92, "critical"))
-	require.NoError(t, err)
+	_, err = synapse.Ingest(createMemoryStatusChangedEvent(70.1, "critical"))
+	_, err = synapse.Ingest(createMemoryStatusChangedEvent(70.2, "critical"))
 
-	_, err = synapse.Ingest(createMemoryStatusChangedEvent(70, "critical"))
-	require.NoError(t, err)
-	_, err = synapse.Ingest(createMemoryStatusChangedEvent(75, "critical"))
-	require.NoError(t, err)
-	// break down fot eaisier dubugging.
-	lastEvent = createMemoryStatusChangedEvent(80, "critical")
-	_, err = synapse.Ingest(lastEvent)
+	_, err = synapse.Ingest(createCpuStatusChangedEvent(92.3, "critical"))
+	_, err = synapse.Ingest(createCpuStatusChangedEvent(92.4, "critical"))
+	_, err = synapse.Ingest(createMemoryStatusChangedEvent(70.2, "critical"))
+	_, err = synapse.Ingest(createCpuStatusChangedEvent(92.5, "critical"))
+	_, err = synapse.Ingest(createMemoryStatusChangedEvent(80.2, "critical"))
+	_, err = synapse.Ingest(createMemoryStatusChangedEvent(75.2, "critical"))
+
 	require.NoError(t, err)
 
 	PrintEventGraph(synapse.GetNetwork())

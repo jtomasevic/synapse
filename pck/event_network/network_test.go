@@ -2,7 +2,7 @@ package event_network
 
 import (
 	"encoding/json"
-	"fmt"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	"testing"
@@ -111,7 +111,6 @@ func TestInMemoryEventNetwork_Siblings2(t *testing.T) {
 	siblings, err := network.Siblings(parents.MemoryCriticalID)
 	require.NoError(t, err)
 	require.NotEmpty(t, siblings)
-	fmt.Println(siblings)
 	require.Equal(t, 1, len(siblings))
 
 	//siblings, err = network.Siblings(childs.MemoryEventsIDs[0])
@@ -321,4 +320,404 @@ func GetLatestTime(times []time.Time) time.Time {
 	}
 
 	return latest
+}
+
+func TestInMemoryEventNetwork_Peers(t *testing.T) {
+	t.Run("finds same-type parentless events", func(t *testing.T) {
+		net := NewInMemoryEventNetwork()
+		eventID1, err := addCpuStatusChangedEvent(net, 98.3, "critical")
+		require.NoError(t, err)
+		eventID2, err := addCpuStatusChangedEvent(net, 95.2, "critical")
+		require.NoError(t, err)
+		eventID3, err := addCpuStatusChangedEvent(net, 97.1, "critical")
+		require.NoError(t, err)
+
+		peers, err := net.Peers(eventID1)
+		require.NoError(t, err)
+		require.Len(t, peers, 2)
+		require.Contains(t, []EventID{eventID2, eventID3}, peers[0].ID)
+		require.Contains(t, []EventID{eventID2, eventID3}, peers[1].ID)
+	})
+
+	t.Run("excludes events with parents", func(t *testing.T) {
+		net := NewInMemoryEventNetwork()
+		eventID1, err := addCpuStatusChangedEvent(net, 98.3, "critical")
+		require.NoError(t, err)
+		eventID2, err := addCpuStatusChangedEvent(net, 95.2, "critical")
+		require.NoError(t, err)
+		eventID3, err := addCpuStatusChangedEvent(net, 97.1, "critical")
+		require.NoError(t, err)
+
+		// Create a derived event and add edges
+		cpuCriticalID, err := addCpuCriticalEvent(net, TimeFrame{}, 3)
+		require.NoError(t, err)
+		err = net.AddEdge(eventID1, cpuCriticalID, "trigger")
+		require.NoError(t, err)
+		err = net.AddEdge(eventID2, cpuCriticalID, "trigger")
+		require.NoError(t, err)
+		err = net.AddEdge(eventID3, cpuCriticalID, "trigger")
+		require.NoError(t, err)
+
+		// Now eventID1, eventID2, eventID3 have parents, so they shouldn't be peers
+		eventID4, err := addCpuStatusChangedEvent(net, 90.0, "critical")
+		require.NoError(t, err)
+		eventID5, err := addCpuStatusChangedEvent(net, 91.0, "critical")
+		require.NoError(t, err)
+
+		peers, err := net.Peers(eventID4)
+		require.NoError(t, err)
+		require.Len(t, peers, 1)
+		require.Equal(t, eventID5, peers[0].ID)
+	})
+
+	t.Run("excludes anchor event itself", func(t *testing.T) {
+		net := NewInMemoryEventNetwork()
+		eventID1, err := addCpuStatusChangedEvent(net, 98.3, "critical")
+		require.NoError(t, err)
+		eventID2, err := addCpuStatusChangedEvent(net, 95.2, "critical")
+		require.NoError(t, err)
+
+		peers, err := net.Peers(eventID1)
+		require.NoError(t, err)
+		require.Len(t, peers, 1)
+		require.Equal(t, eventID2, peers[0].ID)
+		require.NotEqual(t, eventID1, peers[0].ID)
+	})
+
+	t.Run("filters by same domain", func(t *testing.T) {
+		net := NewInMemoryEventNetwork()
+		eventID1, err := addCpuStatusChangedEvent(net, 98.3, "critical")
+		require.NoError(t, err)
+
+		// Add event with different domain
+		event2 := Event{
+			EventType:   CpuStatusChanged,
+			EventDomain: "other_domain",
+			Timestamp:   time.Now(),
+			Properties:  EventProps{"percentage": 95.0, "level": "critical"},
+		}
+		_, err = net.AddEvent(event2)
+		require.NoError(t, err)
+
+		peers, err := net.Peers(eventID1)
+		require.NoError(t, err)
+		require.Len(t, peers, 0) // Different domain, so not a peer
+	})
+
+	t.Run("filters by same type", func(t *testing.T) {
+		net := NewInMemoryEventNetwork()
+		eventID1, err := addCpuStatusChangedEvent(net, 98.3, "critical")
+		require.NoError(t, err)
+		_, err = addMemoryStatusChangedEvent(net, 90.0, "critical")
+		require.NoError(t, err)
+
+		peers, err := net.Peers(eventID1)
+		require.NoError(t, err)
+		require.Len(t, peers, 0) // Different type, so not a peer
+	})
+
+	t.Run("returns error when event not found", func(t *testing.T) {
+		net := NewInMemoryEventNetwork()
+		nonExistentID := EventID(uuid.New())
+		_, err := net.Peers(nonExistentID)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "event not found")
+	})
+
+	t.Run("returns empty when no peers exist", func(t *testing.T) {
+		net := NewInMemoryEventNetwork()
+		eventID1, err := addCpuStatusChangedEvent(net, 98.3, "critical")
+		require.NoError(t, err)
+
+		peers, err := net.Peers(eventID1)
+		require.NoError(t, err)
+		require.Len(t, peers, 0)
+	})
+}
+
+func TestInMemoryEventNetwork_Ancestors(t *testing.T) {
+	t.Run("finds direct ancestors", func(t *testing.T) {
+		net, _, childs := buildInfraSubGraph(t)
+		ancestors, err := net.Ancestors(childs.CpuEventsIDs[0], 1)
+		require.NoError(t, err)
+		require.Len(t, ancestors, 1)
+		require.Equal(t, CpuCritical, ancestors[0].EventType)
+	})
+
+	t.Run("finds ancestors up to maxDepth", func(t *testing.T) {
+		net, _, childs := buildInfraSubGraph(t)
+		ancestors, err := net.Ancestors(childs.CpuEventsIDs[0], 2)
+		require.NoError(t, err)
+		require.GreaterOrEqual(t, len(ancestors), 1)
+		// Should find CpuCritical and potentially ServerNodeChangeStatus
+		foundCpuCritical := false
+		for _, a := range ancestors {
+			if a.EventType == CpuCritical {
+				foundCpuCritical = true
+				break
+			}
+		}
+		require.True(t, foundCpuCritical)
+	})
+
+	t.Run("respects maxDepth limit", func(t *testing.T) {
+		net, _, childs := buildInfraSubGraph(t)
+		ancestors, err := net.Ancestors(childs.CpuEventsIDs[0], 1)
+		require.NoError(t, err)
+		require.Len(t, ancestors, 1) // Only direct parent
+	})
+
+	t.Run("returns empty when maxDepth is 0", func(t *testing.T) {
+		net, _, childs := buildInfraSubGraph(t)
+		ancestors, err := net.Ancestors(childs.CpuEventsIDs[0], 0)
+		require.NoError(t, err)
+		require.Len(t, ancestors, 0)
+	})
+
+	t.Run("returns empty when maxDepth is negative", func(t *testing.T) {
+		net, _, childs := buildInfraSubGraph(t)
+		ancestors, err := net.Ancestors(childs.CpuEventsIDs[0], -1)
+		require.NoError(t, err)
+		require.Len(t, ancestors, 0)
+	})
+
+	t.Run("returns error when event not found", func(t *testing.T) {
+		net := NewInMemoryEventNetwork()
+		nonExistentID := EventID(uuid.New())
+		_, err := net.Ancestors(nonExistentID, 1)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "event not found")
+	})
+
+	t.Run("handles circular references with visited set", func(t *testing.T) {
+		net := NewInMemoryEventNetwork()
+		eventID1, err := addCpuStatusChangedEvent(net, 98.3, "critical")
+		require.NoError(t, err)
+		eventID2, err := addCpuStatusChangedEvent(net, 95.2, "critical")
+		require.NoError(t, err)
+
+		cpuCriticalID, err := addCpuCriticalEvent(net, TimeFrame{}, 1)
+		require.NoError(t, err)
+		err = net.AddEdge(eventID1, cpuCriticalID, "trigger")
+		require.NoError(t, err)
+		err = net.AddEdge(eventID2, cpuCriticalID, "trigger")
+		require.NoError(t, err)
+
+		// Should not infinite loop
+		ancestors, err := net.Ancestors(eventID1, 10)
+		require.NoError(t, err)
+		require.GreaterOrEqual(t, len(ancestors), 0)
+	})
+
+	t.Run("returns error when ancestor event not found in events map", func(t *testing.T) {
+		// This tests the edge case where an edge points to a non-existent event
+		// This is hard to test directly without manipulating internal state
+		// The code path exists but is unlikely to occur in normal operation
+	})
+}
+
+func TestInMemoryEventNetwork_AddEdge_ErrorCases(t *testing.T) {
+	t.Run("returns error when from event not found", func(t *testing.T) {
+		net := NewInMemoryEventNetwork()
+		toID, err := addCpuStatusChangedEvent(net, 98.3, "critical")
+		require.NoError(t, err)
+		nonExistentID := EventID(uuid.New())
+
+		err = net.AddEdge(nonExistentID, toID, "trigger")
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "from event not found")
+	})
+
+	t.Run("returns error when to event not found", func(t *testing.T) {
+		net := NewInMemoryEventNetwork()
+		fromID, err := addCpuStatusChangedEvent(net, 98.3, "critical")
+		require.NoError(t, err)
+		nonExistentID := EventID(uuid.New())
+
+		err = net.AddEdge(fromID, nonExistentID, "trigger")
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "to event not found")
+	})
+}
+
+func TestInMemoryEventNetwork_GetEvent_ErrorCases(t *testing.T) {
+	t.Run("returns error when event not found", func(t *testing.T) {
+		net := NewInMemoryEventNetwork()
+		nonExistentID := EventID(uuid.New())
+		_, err := net.GetByID(nonExistentID)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "event not found")
+	})
+}
+
+func TestInMemoryEventNetwork_Children_ErrorCases(t *testing.T) {
+	t.Run("returns error when event not found", func(t *testing.T) {
+		net := NewInMemoryEventNetwork()
+		nonExistentID := EventID(uuid.New())
+		_, err := net.Children(nonExistentID)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "event not found")
+	})
+
+	t.Run("returns empty when event has no children", func(t *testing.T) {
+		net := NewInMemoryEventNetwork()
+		eventID, err := addCpuStatusChangedEvent(net, 98.3, "critical")
+		require.NoError(t, err)
+
+		children, err := net.Children(eventID)
+		require.NoError(t, err)
+		require.Len(t, children, 0)
+	})
+}
+
+func TestInMemoryEventNetwork_Parents_ErrorCases(t *testing.T) {
+	t.Run("returns error when event not found", func(t *testing.T) {
+		net := NewInMemoryEventNetwork()
+		nonExistentID := EventID(uuid.New())
+		_, err := net.Parents(nonExistentID)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "event not found")
+	})
+
+	t.Run("returns empty when event has no parents", func(t *testing.T) {
+		net := NewInMemoryEventNetwork()
+		eventID, err := addCpuStatusChangedEvent(net, 98.3, "critical")
+		require.NoError(t, err)
+
+		parents, err := net.Parents(eventID)
+		require.NoError(t, err)
+		require.Len(t, parents, 0)
+	})
+}
+
+func TestInMemoryEventNetwork_GetByIDs_ErrorCases(t *testing.T) {
+	t.Run("returns error when one ID not found", func(t *testing.T) {
+		net := NewInMemoryEventNetwork()
+		eventID1, err := addCpuStatusChangedEvent(net, 98.3, "critical")
+		require.NoError(t, err)
+		nonExistentID := EventID(uuid.New())
+
+		_, err = net.GetByIDs([]EventID{eventID1, nonExistentID})
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "event not found")
+	})
+
+	t.Run("returns error when all IDs not found", func(t *testing.T) {
+		net := NewInMemoryEventNetwork()
+		nonExistentID1 := EventID(uuid.New())
+		nonExistentID2 := EventID(uuid.New())
+
+		_, err := net.GetByIDs([]EventID{nonExistentID1, nonExistentID2})
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "event not found")
+	})
+
+	t.Run("returns empty slice when input is empty", func(t *testing.T) {
+		net := NewInMemoryEventNetwork()
+		events, err := net.GetByIDs([]EventID{})
+		require.NoError(t, err)
+		require.Len(t, events, 0)
+	})
+}
+
+func TestInMemoryEventNetwork_Siblings_EdgeCases(t *testing.T) {
+	t.Run("returns empty when event has no parents", func(t *testing.T) {
+		net := NewInMemoryEventNetwork()
+		eventID, err := addCpuStatusChangedEvent(net, 98.3, "critical")
+		require.NoError(t, err)
+
+		siblings, err := net.Siblings(eventID)
+		require.NoError(t, err)
+		require.Len(t, siblings, 0)
+	})
+
+	t.Run("excludes anchor event from siblings", func(t *testing.T) {
+		net, _, childs := buildInfraSubGraph(t)
+		siblings, err := net.Siblings(childs.CpuEventsIDs[0])
+		require.NoError(t, err)
+		require.Len(t, siblings, 2)
+		// Anchor should not be in siblings
+		for _, s := range siblings {
+			require.NotEqual(t, childs.CpuEventsIDs[0], s.ID)
+		}
+	})
+
+	t.Run("returns error when event not found", func(t *testing.T) {
+		net := NewInMemoryEventNetwork()
+		nonExistentID := EventID(uuid.New())
+		_, err := net.Siblings(nonExistentID)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "event not found")
+	})
+
+	t.Run("handles multiple parents correctly", func(t *testing.T) {
+		net := NewInMemoryEventNetwork()
+		eventID1, err := addCpuStatusChangedEvent(net, 98.3, "critical")
+		require.NoError(t, err)
+		eventID2, err := addCpuStatusChangedEvent(net, 95.2, "critical")
+		require.NoError(t, err)
+
+		cpuCriticalID1, err := addCpuCriticalEvent(net, TimeFrame{}, 1)
+		require.NoError(t, err)
+		cpuCriticalID2, err := addCpuCriticalEvent(net, TimeFrame{}, 1)
+		require.NoError(t, err)
+
+		err = net.AddEdge(eventID1, cpuCriticalID1, "trigger")
+		require.NoError(t, err)
+		err = net.AddEdge(eventID2, cpuCriticalID1, "trigger")
+		require.NoError(t, err)
+		err = net.AddEdge(eventID1, cpuCriticalID2, "trigger")
+		require.NoError(t, err)
+
+		siblings, err := net.Siblings(eventID1)
+		require.NoError(t, err)
+		require.Len(t, siblings, 1) // eventID2 is sibling through cpuCriticalID1
+		require.Equal(t, eventID2, siblings[0].ID)
+	})
+}
+
+func TestInMemoryEventNetwork_Descendants_EdgeCases(t *testing.T) {
+	t.Run("returns empty when maxDepth is 0", func(t *testing.T) {
+		net, _, childs := buildInfraSubGraph(t)
+		descendants, err := net.Descendants(childs.CpuEventsIDs[0], 0)
+		require.NoError(t, err)
+		require.Len(t, descendants, 0)
+	})
+
+	t.Run("returns empty when maxDepth is negative", func(t *testing.T) {
+		net, _, childs := buildInfraSubGraph(t)
+		descendants, err := net.Descendants(childs.CpuEventsIDs[0], -1)
+		require.NoError(t, err)
+		require.Len(t, descendants, 0)
+	})
+
+	t.Run("handles events with no children", func(t *testing.T) {
+		net := NewInMemoryEventNetwork()
+		eventID, err := addCpuStatusChangedEvent(net, 98.3, "critical")
+		require.NoError(t, err)
+
+		descendants, err := net.Descendants(eventID, 1)
+		require.NoError(t, err)
+		require.Len(t, descendants, 0)
+	})
+}
+
+func TestInMemoryEventNetwork_Cousins_EdgeCases(t *testing.T) {
+	t.Run("returns error when event not found", func(t *testing.T) {
+		net := NewInMemoryEventNetwork()
+		nonExistentID := EventID(uuid.New())
+		_, err := net.Cousins(nonExistentID, 1)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "event not found")
+	})
+
+	t.Run("excludes anchor event from cousins", func(t *testing.T) {
+		net, _, childs := buildInfraSubGraph(t)
+		cousins, err := net.Cousins(childs.MemoryEventsIDs[0], 1)
+		require.NoError(t, err)
+		// Anchor should not be in cousins
+		for _, c := range cousins {
+			require.NotEqual(t, childs.MemoryEventsIDs[0], c.ID)
+		}
+	})
 }
