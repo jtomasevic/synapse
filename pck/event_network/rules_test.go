@@ -14,7 +14,7 @@ func TestNewDeriveEventRule(t *testing.T) {
 		EventProps:  map[string]any{"occurs": 1},
 	}
 
-	rule := NewDeriveEventRule(condition, template)
+	rule := NewDeriveEventRule("test", condition, template)
 
 	require.NotNil(t, rule)
 	require.Equal(t, rule.ActionType, DeriveNode)
@@ -23,7 +23,7 @@ func TestNewDeriveEventRule(t *testing.T) {
 }
 
 func TestDeriveEventRule_GetActionType(t *testing.T) {
-	rule := NewDeriveEventRule(
+	rule := NewDeriveEventRule("test",
 		NewCondition().IsTypeOf(CpuStatusChanged, Conditions{}),
 		EventTemplate{EventType: CpuCritical, EventDomain: InfraDomain},
 	)
@@ -37,7 +37,7 @@ func TestDeriveEventRule_GetActionTemplate(t *testing.T) {
 		EventDomain: InfraDomain,
 		EventProps:  map[string]any{"occurs": 5},
 	}
-	rule := NewDeriveEventRule(
+	rule := NewDeriveEventRule("test",
 		NewCondition().IsTypeOf(CpuStatusChanged, Conditions{}),
 		template,
 	)
@@ -47,7 +47,7 @@ func TestDeriveEventRule_GetActionTemplate(t *testing.T) {
 
 func TestDeriveEventRule_BindNetwork(t *testing.T) {
 	network := NewInMemoryEventNetwork()
-	rule := NewDeriveEventRule(
+	rule := NewDeriveEventRule("test",
 		NewCondition().IsTypeOf(CpuStatusChanged, Conditions{}),
 		EventTemplate{EventType: CpuCritical, EventDomain: InfraDomain},
 	)
@@ -63,6 +63,7 @@ func TestDeriveEventRule_Process_WithConditionSuccess(t *testing.T) {
 	network := NewInMemoryEventNetwork()
 	// Create a simple rule that checks if event is of type CpuStatusChanged
 	rule := NewDeriveEventRule(
+		"test",
 		NewCondition().IsTypeOf(CpuStatusChanged, Conditions{}),
 		EventTemplate{
 			EventType:   CpuCritical,
@@ -91,6 +92,7 @@ func TestDeriveEventRule_Process_WithConditionFailure(t *testing.T) {
 	network := NewInMemoryEventNetwork()
 	// Create a rule that checks for MemoryStatusChanged
 	rule := NewDeriveEventRule(
+		"test",
 		NewCondition().IsTypeOf(MemoryStatusChanged, Conditions{}),
 		EventTemplate{
 			EventType:   CpuCritical,
@@ -112,14 +114,15 @@ func TestDeriveEventRule_Process_WithConditionFailure(t *testing.T) {
 	require.Error(t, err)
 	require.False(t, ok)
 	require.Nil(t, events)
-	require.Equal(t, err.Error(), "expression is not satisfied")
+	require.Equal(t, err.Error(), "rule condition not satisfied")
 }
 
-func TestDeriveEventRule_Process_WithHasSiblingsCondition(t *testing.T) {
+func TestDeriveEventRule_Process_HasPeers(t *testing.T) {
 	network := NewInMemoryEventNetwork()
 	// Rule requires exactly 2 CpuStatusChanged siblings
 	rule := NewDeriveEventRule(
-		NewCondition().HasSiblings(CpuStatusChanged, Conditions{
+		"test",
+		NewCondition().HasPeers(CpuStatusChanged, Conditions{
 			Counter: &Counter{
 				HowMany:       2,
 				HowManyOrMore: false,
@@ -171,7 +174,7 @@ func TestDeriveEventRule_Process_WithHasChildCondition(t *testing.T) {
 	require.NoError(t, err)
 
 	// Rule checks if event has a CpuStatusChanged child
-	rule := NewDeriveEventRule(
+	rule := NewDeriveEventRule("test",
 		NewCondition().HasChild(CpuStatusChanged, Conditions{}),
 		EventTemplate{
 			EventType:   ServerNodeChangeStatus,
@@ -194,7 +197,7 @@ func TestDeriveEventRule_Process_WithComplexCondition(t *testing.T) {
 	network := NewInMemoryEventNetwork()
 
 	// Create a complex condition with AND operator
-	rule := NewDeriveEventRule(
+	rule := NewDeriveEventRule("test",
 		NewCondition().
 			IsTypeOf(CpuStatusChanged, Conditions{}).
 			And().
@@ -222,7 +225,7 @@ func TestDeriveEventRule_Process_WithComplexCondition(t *testing.T) {
 func TestDeriveEventRule_Process_WithNilCondition(t *testing.T) {
 	network := NewInMemoryEventNetwork()
 
-	rule := NewDeriveEventRule(
+	rule := NewDeriveEventRule("test",
 		nil,
 		EventTemplate{
 			EventType:   CpuCritical,
@@ -255,7 +258,7 @@ func TestDeriveEventRule_EventTemplateProperties(t *testing.T) {
 		EventProps:  props,
 	}
 
-	rule := NewDeriveEventRule(condition, template)
+	rule := NewDeriveEventRule("test", condition, template)
 	require.Equal(t, rule.GetActionTemplate().EventProps, props)
 	require.Len(t, rule.GetActionTemplate().EventProps, 3)
 }
@@ -264,7 +267,7 @@ func TestDeriveEventRule_MultipleRulesWithDifferentConditions(t *testing.T) {
 	network := NewInMemoryEventNetwork()
 
 	// Create rule 1
-	rule1 := NewDeriveEventRule(
+	rule1 := NewDeriveEventRule("cpu_status_critical",
 		NewCondition().IsTypeOf(CpuStatusChanged, Conditions{}),
 		EventTemplate{
 			EventType:   CpuCritical,
@@ -275,7 +278,7 @@ func TestDeriveEventRule_MultipleRulesWithDifferentConditions(t *testing.T) {
 	rule1.BindNetwork(network)
 
 	// Create rule 2
-	rule2 := NewDeriveEventRule(
+	rule2 := NewDeriveEventRule("memory_status_critical",
 		NewCondition().IsTypeOf(MemoryStatusChanged, Conditions{}),
 		EventTemplate{
 			EventType:   MemoryCritical,

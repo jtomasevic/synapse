@@ -79,6 +79,9 @@ func (c *ConditionCompiler) compileTerm(
 	case termHasSiblings:
 		expr.HasSiblings(t.eventType, t.cond)
 
+	case termHasPeers:
+		expr.HasPeers(t.eventType, t.cond)
+
 	case termHasCousin:
 		expr.HasCousin(string(t.eventType), t.cond)
 	}

@@ -45,10 +45,49 @@ type Expression interface {
 	// DescendantsContains contains at least one node in subtree satisfying predicate.
 	DescendantsContains(predicate Predicate) *EventExpression
 
-	// HasSiblings contains sibling event of given type.
+	// HasSiblings Two events are siblings if they share at least one COMMON PARENT
+	// (i.e. they are derived from the same contributing event).
+	//
+	// This captures *branching of causality*.
+	//
+	// Key properties:
+	//  - Requires parents to exist
+	//  - Uses EventNetwork.Siblings (semantic)
+	//  - Local to a causal subtree
+	//  - Used for detecting concurrent effects of the same cause
+	//
+	// Example:
+	// ---------
+	//  server_node_change_status
+	//   ├── cpu_critical
+	//   └── memory_critical
+	//
+	//cpu_critical and memory_critical are siblings
 	HasSiblings(eventType string, conditions Conditions) *EventExpression
 	// SiblingsContains contains at least one sibling in subtree satisfying predicate.
 	SiblingsContains(predicate Predicate) *EventExpression
+	// HasPeers	Two events are peers if they occupy the SAME SEMANTIC ROLE  in the EventNetwork,
+	// regardless of direct causality.
+	//
+	// Peers do NOT require shared parents.
+	//
+	// This captures structural repetition and pattern memory.
+	//
+	// Key properties:
+	//  - Does NOT require parents
+	//  - Global (not local to subtree)
+	//  - Enables aggregation & pattern detection
+	//  - Critical for Structural Memory Layer
+	//
+	// Example:
+	//  memory_critical
+	//  memory_critical
+	//  memory_critical
+	//
+	// All are peers even if:
+	//  - they came from different causes
+	//  - or have no parents at all
+	HasPeers(eventType string, conditions Conditions) *EventExpression
 
 	// HasCousin contains sibling event of given type.
 	HasCousin(eventType string, conditions Conditions) *EventExpression

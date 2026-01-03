@@ -63,6 +63,12 @@ func (c *Condition) InDomain(domain EventDomain) *Condition {
 	return c
 }
 
+/*
+========================
+Semantic relations
+========================
+*/
+
 func (c *Condition) HasChild(eventType EventType, cond Conditions) *Condition {
 	return c.addRelation(termHasChild, eventType, cond)
 }
@@ -73,6 +79,10 @@ func (c *Condition) HasDescendants(eventType EventType, cond Conditions) *Condit
 
 func (c *Condition) HasSiblings(eventType EventType, cond Conditions) *Condition {
 	return c.addRelation(termHasSiblings, eventType, cond)
+}
+
+func (c *Condition) HasPeers(eventType EventType, cond Conditions) *Condition {
+	return c.addRelation(termHasPeers, eventType, cond)
 }
 
 func (c *Condition) HasCousin(eventType EventType, cond Conditions) *Condition {

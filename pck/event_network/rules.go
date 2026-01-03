@@ -4,6 +4,8 @@ import (
 	"errors"
 )
 
+var ErrNotSatisfied = errors.New("rule condition not satisfied")
+
 type Derivation struct {
 	Template     EventTemplate
 	Contributors []EventID
@@ -20,9 +22,11 @@ type Rule interface {
 	BindNetwork(network EventNetwork)
 	GetActionType() ActionType
 	GetActionTemplate() EventTemplate
+	GetID() string
 }
 
 type DeriveEventRule struct {
+	ID                string `json:"id"`
 	ActionType        ActionType
 	Network           EventNetwork  `json:"-"`
 	Condition         *Condition    `json:"condition"`
@@ -31,9 +35,11 @@ type DeriveEventRule struct {
 }
 
 func NewDeriveEventRule(
+	uniqueName string,
 	condition *Condition,
 	eventTemplate EventTemplate) *DeriveEventRule {
 	return &DeriveEventRule{
+		ID:            uniqueName,
 		ActionType:    DeriveNode,
 		Condition:     condition,
 		EventTemplate: eventTemplate,
@@ -49,10 +55,10 @@ func (r *DeriveEventRule) Process(event Event) (bool, []Event, error) {
 	if err != nil {
 		return false, nil, err
 	}
-	if ok {
-		return ok, events, nil
+	if !ok {
+		return false, nil, ErrNotSatisfied // <-- important change
 	}
-	return false, nil, errors.New("expression is not satisfied")
+	return ok, events, nil
 }
 
 func (r *DeriveEventRule) BindNetwork(network EventNetwork) {
@@ -66,4 +72,8 @@ func (r *DeriveEventRule) GetActionType() ActionType {
 
 func (r *DeriveEventRule) GetActionTemplate() EventTemplate {
 	return r.EventTemplate
+}
+
+func (r *DeriveEventRule) GetID() string {
+	return r.ID
 }
