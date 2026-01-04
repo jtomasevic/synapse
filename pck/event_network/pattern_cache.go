@@ -87,12 +87,8 @@ func (p *CachedRelationProvider) SiblingsCached(anchor EventID, cond Conditions,
 	})
 }
 
-// PeersCached: parentless cohort events (your new HasPeers semantics).
+// PeersCached: parentless cohort events
 // This assumes EventNetwork has Peers(of) implemented.
-// If you don't add it to EventNetwork yet, you can build peers by:
-//   - GetByType(filterType) then filter candidates with Parents(candidateID)==0
-//
-// but that becomes expensive, so better to implement Peers on the network.
 func (p *CachedRelationProvider) PeersCached(anchor EventID, cond Conditions, filterType EventType) ([]Event, error) {
 	return p.getOrCompute(relPeers, anchor, cond, filterType, func() ([]Event, error) {
 		return p.Net.Peers(anchor)
@@ -138,7 +134,7 @@ func (p *CachedRelationProvider) getOrCompute(
 		TypeRev: p.Mem.TypeRev(filterType),
 
 		// POC safety net for multi-hop effects:
-		// If you later want more precision, you can remove this for some relations.
+		// If we later want more precision, we can remove this for some relations.
 		GlobalRev: p.Mem.GlobalRev(),
 	}
 

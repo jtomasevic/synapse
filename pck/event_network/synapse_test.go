@@ -7,7 +7,7 @@ import (
 )
 
 func Test_WithComplexRules(t *testing.T) {
-	synapse := NewSynapse()
+	synapse := NewSynapse(nil)
 
 	synapse.RegisterRule(CpuStatusChanged, NewDeriveEventRule("cpu_status_critical",
 		NewCondition().HasPeers(CpuStatusChanged, Conditions{
