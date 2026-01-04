@@ -26,7 +26,7 @@ import (
 
 // fakeNetwork is a small, deterministic EventNetwork implementation used for tests.
 //
-// Semantics (aligned with your SYNAPSE model):
+// Semantics (aligned with SYNAPSE model):
 //  - AddEdge(from, to): from is a contributor, to is a derived event.
 //  - Children(of): contributors of 'of' (incoming edges).
 //  - Parents(of): derived events that use 'of' as contributor (outgoing edges).
@@ -38,7 +38,7 @@ import (
 //    (Not used for correctness claims; we just need a stable non-empty path.)
 //
 // IMPORTANT:
-//  This is not meant as your production/POC network implementation.
+//  This is not meant as our production/POC network implementation.
 //  It only exists to make StructuralMemory tests deterministic and high-coverage.
 
 type fakeNetwork struct {
@@ -66,7 +66,7 @@ func (n *fakeNetwork) AddEvent(event Event) (EventID, error) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 
-	id := nid() // uses helper from structural_memory.go (or your package) to avoid assumptions.
+	id := nid() // uses helper to avoid assumptions.
 	event.ID = id
 	if event.Timestamp.IsZero() {
 		event.Timestamp = time.Now()

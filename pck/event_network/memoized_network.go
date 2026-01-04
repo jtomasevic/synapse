@@ -13,7 +13,7 @@ import (
 // 3) Optional wrapper: MemoizedNetwork (POC)
 // ===========================================
 //
-// If you want Expression to stay unaware of caching, pass MemoizedNetwork as EventNetwork.
+// If we want Expression to stay unaware of caching, pass MemoizedNetwork as EventNetwork.
 // It delegates writes to base network and updates memory revisions.
 // Reads are cached via PatternCache.
 //
@@ -108,7 +108,7 @@ func (m *MemoizedNetwork) GetByType(eventType EventType) ([]Event, error) {
 // 4) Condition application
 // ==========================
 //
-// Aligns with your Expression model:
+// Aligns with our Expression model:
 // - filter by type (optional)
 // - property filters
 // - time window relative to anchor timestamp

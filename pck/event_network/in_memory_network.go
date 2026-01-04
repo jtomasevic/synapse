@@ -109,7 +109,7 @@ func (n *InMemoryEventNetwork) Peers(of EventID) ([]Event, error) {
 	}
 
 	// Optional strictness: most use-cases want peer comparisons within the same domain.
-	// If you want cross-domain peers, remove the domain check.
+	// If we want cross-domain peers, remove the domain check.
 	anchorType := anchor.EventType
 	anchorDomain := anchor.EventDomain
 

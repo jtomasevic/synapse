@@ -8,10 +8,11 @@ import (
 )
 
 type SynapseRuntime struct {
-	Network     EventNetwork
-	EvalNetwork EventNetwork
-	Memory      StructuralMemory
-	rulesByType map[EventType][]Rule
+	Network        EventNetwork
+	EvalNetwork    EventNetwork
+	Memory         StructuralMemory
+	rulesByType    map[EventType][]Rule
+	PatternWatcher *PatternWatcher
 }
 
 func (s *SynapseRuntime) RegisterRule(eventType EventType, rule Rule) {
@@ -112,6 +113,7 @@ func (s *SynapseRuntime) materializeDerived(anchor Event, matched []Event, rule 
 	// Semantic commit point for caching/pattern memory
 	if s.Memory != nil {
 		s.Memory.OnMaterialized(derived, contributors, rule.GetID())
+		s.PatternWatcher.OnMaterialized(derived, contributors, rule.GetID())
 	}
 
 	return derived, nil
