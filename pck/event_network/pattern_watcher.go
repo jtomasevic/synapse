@@ -1,7 +1,11 @@
 // pattern_watcher.go
 package event_network
 
-import "time"
+import (
+	"encoding/json"
+	"fmt"
+	"time"
+)
 
 // PatternMatch is what we get when a repeated pattern is detected.
 //
@@ -25,6 +29,20 @@ type PatternMatch struct {
 // PatternListener is  “fire event or method call” sink.
 type PatternListener interface {
 	OnPatternRepeated(match PatternMatch)
+}
+
+func NewPatternListenerPoc() *PatternListenerPoc {
+	return &PatternListenerPoc{}
+}
+
+type PatternListenerPoc struct {
+}
+
+func (p *PatternListenerPoc) OnPatternRepeated(match PatternMatch) {
+	str, _ := json.MarshalIndent(match, "", "	")
+	fmt.Println("PATTERN REPEATED --------------")
+	fmt.Println(string(str))
+	fmt.Println("-------------------------------")
 }
 
 // PatternWatcher is the glue between StructuralMemory/PatternMemory
@@ -52,7 +70,7 @@ func NewPatternWatcher(mem PatternMemory, listener PatternListener) *PatternWatc
 	return &PatternWatcher{
 		Mem:      mem,
 		Depth:    4,
-		MinCount: 2,
+		MinCount: 1,
 		Listener: listener,
 	}
 }
