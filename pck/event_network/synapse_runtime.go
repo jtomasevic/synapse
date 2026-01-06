@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/google/uuid"
+	"time"
 )
 
 type SynapseRuntime struct {
@@ -57,6 +58,7 @@ func (s *SynapseRuntime) Ingest(event Event) (EventID, error) {
 			}
 
 			derived, err := s.materializeDerived(cur, contributors, rule)
+
 			derivedEvents = append(derivedEvents, derived)
 			contributedEvents[derived.ID] = append(contributors, cur)
 
@@ -85,6 +87,16 @@ func (s *SynapseRuntime) Ingest(event Event) (EventID, error) {
 	return event.ID, nil
 }
 
+func findEarliestDate(events []Event) time.Time {
+	earliest := events[0].Timestamp
+	for _, e := range events[1:] {
+		if e.Timestamp.After(earliest) {
+			earliest = e.Timestamp
+		}
+	}
+	return earliest
+}
+
 func (s *SynapseRuntime) materializeDerived(anchor Event, matched []Event, rule Rule) (Event, error) {
 	template := rule.GetActionTemplate()
 
@@ -93,16 +105,15 @@ func (s *SynapseRuntime) materializeDerived(anchor Event, matched []Event, rule 
 		EventDomain: template.EventDomain,
 		Properties:  template.EventProps,
 	}
-
+	// contributors = matched + anchor
+	contributors := append(append([]Event(nil), matched...), anchor)
+	derived.Timestamp = findEarliestDate(contributors)
 	// IMPORTANT: do NOT call s.Ingest here (that would run rules before edges exist).
 	id, err := s.Network.AddEvent(derived)
 	if err != nil {
 		return Event{}, err
 	}
 	derived.ID = id
-
-	// contributors = matched + anchor
-	contributors := append(append([]Event(nil), matched...), anchor)
 
 	for _, ev := range contributors {
 		if err := s.Network.AddEdge(ev.ID, derived.ID, "trigger"); err != nil {

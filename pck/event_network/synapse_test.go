@@ -7,13 +7,13 @@ import (
 )
 
 func Test_WithComplexRules(t *testing.T) {
-	//listener := &testPatternListener{}
-	//watcher := NewPatternWatcher(mem, listener)
-	//
 
 	listener := NewPatternListenerPoc()
 
-	synapse := NewSynapse(listener)
+	synapse := NewSynapse(listener, PatternConfig{
+		Depth:    4,
+		MinCount: 1,
+	})
 
 	synapse.RegisterRule(CpuStatusChanged, NewDeriveEventRule("cpu_status_critical",
 		NewCondition().HasPeers(CpuStatusChanged, Conditions{
@@ -95,4 +95,48 @@ func Test_WithComplexRules(t *testing.T) {
 	require.NoError(t, err)
 
 	PrintEventGraph(synapse.GetNetwork())
+}
+
+func Test_CrossDomainEvents(t *testing.T) {
+	listener := NewPatternListenerPoc()
+	synapse := NewSynapse(listener, PatternConfig{
+		Depth:    4,
+		MinCount: 5,
+	})
+
+	synapse.RegisterRule(ZebrasMigration, NewDeriveEventRule("1",
+		NewCondition().HasPeers(UnusualBirdBehavior,
+			Conditions{
+				Counter: &Counter{
+					HowMany:       1,
+					HowManyOrMore: true,
+				},
+				TimeWindow: &TimeWindow{
+					Within:   8,
+					TimeUnit: Hour,
+				},
+			},
+		), getAnimalObservationDerivedEventTemplate()))
+
+	synapse.RegisterRule(UnusualBirdBehavior, NewDeriveEventRule("2",
+		NewCondition().HasPeers(ZebrasMigration,
+			Conditions{
+				Counter: &Counter{
+					HowMany:       1,
+					HowManyOrMore: true,
+				},
+				TimeWindow: &TimeWindow{
+					Within:   8,
+					TimeUnit: Hour,
+				},
+			},
+		), getAnimalObservationDerivedEventTemplate()))
+
+	_, err := synapse.Ingest(createZebrasEvent())
+	_, err = synapse.Ingest(createUnusualBirdBehaviorEvent())
+
+	require.NoError(t, err)
+
+	PrintEventGraph(synapse.GetNetwork())
+
 }

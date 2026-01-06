@@ -3,6 +3,7 @@ package event_network
 import (
 	"fmt"
 	"github.com/google/uuid"
+	"time"
 )
 
 type InMemoryEventNetwork struct {
@@ -25,7 +26,11 @@ func NewInMemoryEventNetwork() *InMemoryEventNetwork {
 
 func (n *InMemoryEventNetwork) AddEvent(event Event) (EventID, error) {
 
-	event.ID = EventID(uuid.New())
+	event.ID = uuid.New()
+
+	if event.Timestamp.IsZero() {
+		event.Timestamp = time.Now()
+	}
 
 	n.events[event.ID] = event
 	n.eventsByType[event.EventType] = append(n.eventsByType[event.EventType], event)

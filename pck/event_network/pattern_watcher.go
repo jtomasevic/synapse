@@ -65,12 +65,17 @@ type PatternWatcher struct {
 	Listener PatternListener
 }
 
+type PatternConfig struct {
+	Depth    int
+	MinCount int
+}
+
 // NewPatternWatcher creates a watcher.
-func NewPatternWatcher(mem PatternMemory, listener PatternListener) *PatternWatcher {
+func NewPatternWatcher(mem PatternMemory, config PatternConfig, listener PatternListener) *PatternWatcher {
 	return &PatternWatcher{
 		Mem:      mem,
-		Depth:    4,
-		MinCount: 1,
+		Depth:    config.Depth,
+		MinCount: config.MinCount,
 		Listener: listener,
 	}
 }
@@ -108,6 +113,7 @@ func (w *PatternWatcher) OnMaterialized(derived Event, contributors []Event, rul
 	}
 
 	stats, ok := w.Mem.GetLineageStats(key)
+	//stats.Count++
 	if !ok {
 		// If memory always creates stats when it computes sigs, this shouldn't happen,
 		// but we keep it safe.
