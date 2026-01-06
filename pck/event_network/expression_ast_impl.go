@@ -552,7 +552,8 @@ func (e *EventExpression) applyConditions(
 
 		if cond.TimeWindow != nil {
 			d := cond.TimeWindow.TimeUnit.ToDuration(cond.TimeWindow.Within)
-			if ev.Timestamp.Before(anchorTS.Add(-d)) || ev.Timestamp.After(anchorTS) {
+			//TODO: if ev.Timestamp.Before(anchorTS.Add(-d)) || ev.Timestamp.After(anchorTS) {
+			if ev.Timestamp.Before(anchorTS.Add(-d)) || ev.Timestamp.After(anchorTS.Add(d)) {
 				continue
 			}
 		}

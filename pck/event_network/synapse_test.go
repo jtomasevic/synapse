@@ -132,8 +132,52 @@ func Test_CrossDomainEvents(t *testing.T) {
 			},
 		), getAnimalObservationDerivedEventTemplate()))
 
+	synapse.RegisterRule(MinorTremors, NewDeriveEventRule("2",
+		NewCondition().HasPeers(MinorTremors,
+			Conditions{
+				Counter: &Counter{
+					HowMany:       5,
+					HowManyOrMore: true,
+				},
+				TimeWindow: &TimeWindow{
+					Within:   8,
+					TimeUnit: Hour,
+				},
+			},
+		), getMinorTremorDerivedEventTemplate()))
+
+	synapse.RegisterRule(HighFrequencyOfMinorTremors, NewDeriveEventRule("3",
+		NewCondition().HasPeers(MultipleAnimalUnexpectedBehavior, Conditions{
+			Counter: &Counter{
+				HowMany:       1,
+				HowManyOrMore: true,
+			},
+			TimeWindow: &TimeWindow{
+				Within:   8,
+				TimeUnit: Hour,
+			},
+		},
+		), getPotentialNaturalCatastrophicDerivedEventTemplate()))
+
+	synapse.RegisterRule(MultipleAnimalUnexpectedBehavior, NewDeriveEventRule("3",
+		NewCondition().HasPeers(HighFrequencyOfMinorTremors, Conditions{
+			Counter: &Counter{
+				HowMany:       1,
+				HowManyOrMore: true,
+			},
+			TimeWindow: &TimeWindow{
+				Within:   8,
+				TimeUnit: Hour,
+			},
+		},
+		), getPotentialNaturalCatastrophicDerivedEventTemplate()))
+
 	_, err := synapse.Ingest(createZebrasEvent())
 	_, err = synapse.Ingest(createUnusualBirdBehaviorEvent())
+
+	for _, gEvent := range getMinorTremorsEvents() {
+		synapse.Ingest(gEvent)
+	}
 
 	require.NoError(t, err)
 
