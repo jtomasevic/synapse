@@ -43,7 +43,10 @@ func newTestSynapseWithMemoryAndWatcher(t *testing.T) (*SynapseRuntime, *InMemor
 	mem := NewInMemoryStructuralMemory()
 
 	listener := &testPatternListener{}
-	watcher := NewPatternWatcher(mem, listener)
+	watcher := NewPatternWatcher(mem, PatternConfig{
+		Depth:    4,
+		MinCount: 1,
+	}, listener)
 	watcher.Depth = 4
 	watcher.MinCount = 2 // “repeated” means Count>=2
 
@@ -148,10 +151,10 @@ func TestPatternListenerPoc(t *testing.T) {
 				Depth:         4,
 				Sig:           12345, // uint64 signature
 			},
-			Occurrence:    2,
-			At:            time.Now(),
-			DerivedID:     EventID(uuid.New()),
-			RuleID:        "test-rule",
+			Occurrence:     2,
+			At:             time.Now(),
+			DerivedID:      EventID(uuid.New()),
+			RuleID:         "test-rule",
 			ContributorIDs: []EventID{EventID(uuid.New()), EventID(uuid.New())},
 		}
 
@@ -176,7 +179,10 @@ func TestPatternWatcher_OnMaterialized_NilChecks(t *testing.T) {
 
 	t.Run("returns early when Mem is nil", func(t *testing.T) {
 		listener := &testPatternListener{}
-		watcher := NewPatternWatcher(nil, listener)
+		watcher := NewPatternWatcher(nil, PatternConfig{
+			Depth:    4,
+			MinCount: 1,
+		}, listener)
 		derived := Event{EventType: CpuCritical, EventDomain: InfraDomain}
 		contributors := []Event{{EventType: CpuStatusChanged, EventDomain: InfraDomain}}
 
@@ -187,7 +193,10 @@ func TestPatternWatcher_OnMaterialized_NilChecks(t *testing.T) {
 
 	t.Run("returns early when Listener is nil", func(t *testing.T) {
 		mem := NewInMemoryStructuralMemory()
-		watcher := NewPatternWatcher(mem, nil)
+		watcher := NewPatternWatcher(mem, PatternConfig{
+			Depth:    4,
+			MinCount: 1,
+		}, nil)
 		derived := Event{EventType: CpuCritical, EventDomain: InfraDomain}
 		contributors := []Event{{EventType: CpuStatusChanged, EventDomain: InfraDomain}}
 

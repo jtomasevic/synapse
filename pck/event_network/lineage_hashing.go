@@ -2,7 +2,6 @@ package event_network
 
 import (
 	"encoding/binary"
-	"fmt"
 	"hash"
 	"hash/fnv"
 )
@@ -38,17 +37,17 @@ func HashEventBase(ev Event) uint64 {
 	// We can replace this with a curated/normalized props hash.
 	if ev.Properties != nil {
 		// Order-independent hashing of keys.
-		keys := make([]string, 0, len(ev.Properties))
-		for k := range ev.Properties {
-			keys = append(keys, k)
-		}
-		keys = stableSortStrings(keys)
-		for _, k := range keys {
-			// WARNING: fmt.Sprintf("%v") can be unstable for some complex types,
-			// but is OK for POC if properties are primitives.
-			writeString64(h, k)
-			writeString64(h, fmt.Sprintf("%v", ev.Properties[k]))
-		}
+		//keys := make([]string, 0, len(ev.Properties))
+		//for k := range ev.Properties {
+		//	keys = append(keys, k)
+		//}
+		//keys = stableSortStrings(keys)
+		//for _, k := range keys {
+		//	// WARNING: fmt.Sprintf("%v") can be unstable for some complex types,
+		//	// but is OK for POC if properties are primitives.
+		//	writeString64(h, k)
+		//	writeString64(h, fmt.Sprintf("%v", ev.Properties[k]))
+		//}
 	}
 
 	return h.Sum64()

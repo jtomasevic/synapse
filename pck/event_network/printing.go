@@ -1,6 +1,9 @@
 package event_network
 
-import "fmt"
+import (
+	"fmt"
+	"time"
+)
 
 func printDerivedFrom(net *InMemoryEventNetwork, ev Event, indent string) {
 	edges := net.in[ev.ID] // contributors → ev
@@ -44,10 +47,11 @@ func PrintEventGraph(network EventNetwork) {
 			}
 
 			fmt.Printf(
-				"%s %s (%s)\n",
+				"%s %s (%s), %s \n",
 				prefix,
 				ev.EventType,
 				ev.ID.String()[:8],
+				ev.Timestamp.UTC().Format(time.DateTime),
 			)
 
 			printDerivedFrom(net, ev, "    ")
