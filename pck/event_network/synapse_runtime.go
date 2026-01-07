@@ -1,9 +1,8 @@
 package event_network
 
 import (
-	"encoding/json"
 	"errors"
-	"fmt"
+
 	"github.com/google/uuid"
 	"time"
 )
@@ -13,7 +12,7 @@ type SynapseRuntime struct {
 	EvalNetwork    EventNetwork
 	Memory         StructuralMemory
 	rulesByType    map[EventType][]Rule
-	PatternWatcher *PatternWatcher
+	PatternWatcher []PatternObserver
 }
 
 func (s *SynapseRuntime) RegisterRule(eventType EventType, rule Rule) {
@@ -124,7 +123,10 @@ func (s *SynapseRuntime) materializeDerived(anchor Event, matched []Event, rule 
 	// Semantic commit point for caching/pattern memory
 	if s.Memory != nil {
 		s.Memory.OnMaterialized(derived, contributors, rule.GetID())
-		s.PatternWatcher.OnMaterialized(derived, contributors, rule.GetID())
+		for _, w := range s.PatternWatcher {
+			w.OnMaterialized(derived, contributors, rule.GetID())
+		}
+		//s.PatternWatcher.OnMaterialized(derived, contributors, rule.GetID())
 	}
 
 	return derived, nil
@@ -157,9 +159,9 @@ func (s *SynapseRuntime) lookForPatterns(key MotifKey) (MotifKey, int) {
 }
 
 func (s *SynapseRuntime) OnRecognize(motifKey MotifKey, count int) {
-	key, _ := json.MarshalIndent(motifKey, "", "  ")
-	fmt.Println("bingo", string(key))
-	fmt.Println(count)
+	//key, _ := json.MarshalIndent(motifKey, "", "  ")
+	//fmt.Println("bingo", string(key))
+	//fmt.Println(count)
 }
 
 func buildMotifKey(derived Event, contributors []Event, ruleID string) MotifKey {

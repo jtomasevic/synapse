@@ -66,18 +66,27 @@ type PatternWatcher struct {
 }
 
 type PatternConfig struct {
-	Depth    int
-	MinCount int
+	Depth           int
+	MinCount        int
+	PatternListener PatternListener
 }
 
 // NewPatternWatcher creates a watcher.
-func NewPatternWatcher(mem PatternMemory, config PatternConfig, listener PatternListener) *PatternWatcher {
+func NewPatternWatcher(mem PatternMemory, config PatternConfig) *PatternWatcher {
 	return &PatternWatcher{
 		Mem:      mem,
 		Depth:    config.Depth,
 		MinCount: config.MinCount,
-		Listener: listener,
+		Listener: config.PatternListener,
 	}
+}
+
+func (w *PatternWatcher) SetDepth(depth int) {
+	w.Depth = depth
+}
+
+func (w *PatternWatcher) SetMinCount(minCount int) {
+	w.MinCount = minCount
 }
 
 // OnMaterialized should be called *after*:

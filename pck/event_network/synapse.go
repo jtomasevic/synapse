@@ -6,20 +6,26 @@ type Synapse interface {
 	GetNetwork() EventNetwork
 }
 
-func NewSynapse(listener PatternListener, patternConfig PatternConfig) *SynapseRuntime {
+func NewSynapse(patternConfig []PatternConfig) *SynapseRuntime {
 	base := NewInMemoryEventNetwork()
 	memory := NewInMemoryStructuralMemory()
 	eval := NewMemoizedNetwork(base, memory)
-	watcher := NewPatternWatcher(memory, PatternConfig{
-		Depth:    patternConfig.Depth,
-		MinCount: patternConfig.MinCount,
-	}, listener)
+
+	var watchers []PatternObserver
+	for _, config := range patternConfig {
+		watcher := NewPatternWatcher(memory, PatternConfig{
+			Depth:           config.Depth,
+			MinCount:        config.MinCount,
+			PatternListener: config.PatternListener,
+		})
+		watchers = append(watchers, watcher)
+	}
 
 	return &SynapseRuntime{
 		Network:        base,
 		EvalNetwork:    eval,
 		Memory:         memory,
 		rulesByType:    make(map[EventType][]Rule),
-		PatternWatcher: watcher,
+		PatternWatcher: watchers,
 	}
 }

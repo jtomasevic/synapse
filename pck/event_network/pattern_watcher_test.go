@@ -44,9 +44,10 @@ func newTestSynapseWithMemoryAndWatcher(t *testing.T) (*SynapseRuntime, *InMemor
 
 	listener := &testPatternListener{}
 	watcher := NewPatternWatcher(mem, PatternConfig{
-		Depth:    4,
-		MinCount: 1,
-	}, listener)
+		Depth:           4,
+		MinCount:        1,
+		PatternListener: listener,
+	})
 	watcher.Depth = 4
 	watcher.MinCount = 2 // “repeated” means Count>=2
 
@@ -54,7 +55,7 @@ func newTestSynapseWithMemoryAndWatcher(t *testing.T) (*SynapseRuntime, *InMemor
 		Network:        base,
 		Memory:         mem,
 		rulesByType:    map[EventType][]Rule{},
-		PatternWatcher: watcher, // <-- requires SynapseRuntime to have Patterns *PatternWatcher
+		PatternWatcher: []PatternObserver{watcher}, // <-- requires SynapseRuntime to have Patterns *PatternWatcher
 	}
 
 	return syn, mem, listener
@@ -112,7 +113,7 @@ func TestPatternWatcher_FiresOnSecondOccurrence_Depth4(t *testing.T) {
 
 	// semantic commit point: update memory + watcher
 	syn.Memory.OnMaterialized(d1, []Event{leaves[0], leaves[1]}, "ruleA")
-	syn.PatternWatcher.OnMaterialized(d1, []Event{leaves[0], leaves[1]}, "ruleA")
+	syn.PatternWatcher[0].OnMaterialized(d1, []Event{leaves[0], leaves[1]}, "ruleA")
 
 	// second materialization (same shape again)
 	d2 := Event{EventType: CpuCritical, EventDomain: InfraDomain, Timestamp: time.Now()}
@@ -126,7 +127,7 @@ func TestPatternWatcher_FiresOnSecondOccurrence_Depth4(t *testing.T) {
 	require.NoError(t, err)
 
 	syn.Memory.OnMaterialized(d2, []Event{leaves[0], leaves[1]}, "ruleA")
-	syn.PatternWatcher.OnMaterialized(d2, []Event{leaves[0], leaves[1]}, "ruleA")
+	syn.PatternWatcher[0].OnMaterialized(d2, []Event{leaves[0], leaves[1]}, "ruleA")
 
 	// 3) Assert: should fire exactly once (on the second occurrence)
 	matches := listener.All()
@@ -153,9 +154,9 @@ func TestPatternListenerPoc(t *testing.T) {
 			},
 			Occurrence:     2,
 			At:             time.Now(),
-			DerivedID:      EventID(uuid.New()),
+			DerivedID:      uuid.New(),
 			RuleID:         "test-rule",
-			ContributorIDs: []EventID{EventID(uuid.New()), EventID(uuid.New())},
+			ContributorIDs: []EventID{uuid.New(), uuid.New()},
 		}
 
 		// Should not panic
@@ -180,9 +181,10 @@ func TestPatternWatcher_OnMaterialized_NilChecks(t *testing.T) {
 	t.Run("returns early when Mem is nil", func(t *testing.T) {
 		listener := &testPatternListener{}
 		watcher := NewPatternWatcher(nil, PatternConfig{
-			Depth:    4,
-			MinCount: 1,
-		}, listener)
+			Depth:           4,
+			MinCount:        1,
+			PatternListener: listener,
+		})
 		derived := Event{EventType: CpuCritical, EventDomain: InfraDomain}
 		contributors := []Event{{EventType: CpuStatusChanged, EventDomain: InfraDomain}}
 
@@ -196,7 +198,7 @@ func TestPatternWatcher_OnMaterialized_NilChecks(t *testing.T) {
 		watcher := NewPatternWatcher(mem, PatternConfig{
 			Depth:    4,
 			MinCount: 1,
-		}, nil)
+		})
 		derived := Event{EventType: CpuCritical, EventDomain: InfraDomain}
 		contributors := []Event{{EventType: CpuStatusChanged, EventDomain: InfraDomain}}
 
@@ -211,7 +213,7 @@ func TestPatternWatcher_OnMaterialized_NilChecks(t *testing.T) {
 func TestPatternWatcher_OnMaterialized_DepthValidation(t *testing.T) {
 	t.Run("returns early when depth is negative", func(t *testing.T) {
 		syn, _, listener := newTestSynapseWithMemoryAndWatcher(t)
-		syn.PatternWatcher.Depth = -1
+		syn.PatternWatcher[0].SetDepth(-1)
 
 		derived := Event{EventType: CpuCritical, EventDomain: InfraDomain, Timestamp: time.Now()}
 		contributors := []Event{
@@ -219,7 +221,7 @@ func TestPatternWatcher_OnMaterialized_DepthValidation(t *testing.T) {
 		}
 
 		syn.Memory.OnMaterialized(derived, contributors, "ruleA")
-		syn.PatternWatcher.OnMaterialized(derived, contributors, "ruleA")
+		syn.PatternWatcher[0].OnMaterialized(derived, contributors, "ruleA")
 
 		matches := listener.All()
 		require.Len(t, matches, 0)
@@ -228,7 +230,7 @@ func TestPatternWatcher_OnMaterialized_DepthValidation(t *testing.T) {
 	t.Run("returns early when depth exceeds MaxSignatureDepth", func(t *testing.T) {
 		syn, mem, listener := newTestSynapseWithMemoryAndWatcher(t)
 		maxDepth := mem.MaxSignatureDepth()
-		syn.PatternWatcher.Depth = maxDepth + 1
+		syn.PatternWatcher[0].SetDepth(maxDepth + 1)
 
 		derived := Event{EventType: CpuCritical, EventDomain: InfraDomain, Timestamp: time.Now()}
 		contributors := []Event{
@@ -236,7 +238,7 @@ func TestPatternWatcher_OnMaterialized_DepthValidation(t *testing.T) {
 		}
 
 		syn.Memory.OnMaterialized(derived, contributors, "ruleA")
-		syn.PatternWatcher.OnMaterialized(derived, contributors, "ruleA")
+		syn.PatternWatcher[0].OnMaterialized(derived, contributors, "ruleA")
 
 		matches := listener.All()
 		require.Len(t, matches, 0)
@@ -250,7 +252,7 @@ func TestPatternWatcher_OnMaterialized_SignatureFailure(t *testing.T) {
 		derived := Event{
 			EventType:   CpuCritical,
 			EventDomain: InfraDomain,
-			ID:          EventID(uuid.New()),
+			ID:          uuid.New(),
 			Timestamp:   time.Now(),
 		}
 		contributors := []Event{
@@ -258,7 +260,7 @@ func TestPatternWatcher_OnMaterialized_SignatureFailure(t *testing.T) {
 		}
 
 		// Don't call Memory.OnMaterialized, so signature won't exist
-		syn.PatternWatcher.OnMaterialized(derived, contributors, "ruleA")
+		syn.PatternWatcher[0].OnMaterialized(derived, contributors, "ruleA")
 
 		matches := listener.All()
 		require.Len(t, matches, 0)
@@ -279,7 +281,7 @@ func TestPatternWatcher_OnMaterialized_StatsFailure(t *testing.T) {
 
 		// Call OnMaterialized but with a depth that might not have stats
 		syn.Memory.OnMaterialized(derived, contributors, "ruleA")
-		syn.PatternWatcher.OnMaterialized(derived, contributors, "ruleA")
+		syn.PatternWatcher[0].OnMaterialized(derived, contributors, "ruleA")
 
 		// First occurrence, so should not fire (Count < MinCount)
 		matches := listener.All()
@@ -290,7 +292,7 @@ func TestPatternWatcher_OnMaterialized_StatsFailure(t *testing.T) {
 func TestPatternWatcher_OnMaterialized_CountThreshold(t *testing.T) {
 	t.Run("does not fire when Count < MinCount", func(t *testing.T) {
 		syn, _, listener := newTestSynapseWithMemoryAndWatcher(t)
-		syn.PatternWatcher.MinCount = 2
+		syn.PatternWatcher[0].SetMinCount(2)
 
 		derived := Event{EventType: CpuCritical, EventDomain: InfraDomain, Timestamp: time.Now()}
 		contributors := []Event{
@@ -299,7 +301,7 @@ func TestPatternWatcher_OnMaterialized_CountThreshold(t *testing.T) {
 
 		// First occurrence (Count = 1)
 		syn.Memory.OnMaterialized(derived, contributors, "ruleA")
-		syn.PatternWatcher.OnMaterialized(derived, contributors, "ruleA")
+		syn.PatternWatcher[0].OnMaterialized(derived, contributors, "ruleA")
 
 		matches := listener.All()
 		require.Len(t, matches, 0) // Should not fire on first occurrence
@@ -307,7 +309,7 @@ func TestPatternWatcher_OnMaterialized_CountThreshold(t *testing.T) {
 
 	t.Run("fires on second occurrence when MinCount is 2", func(t *testing.T) {
 		syn, _, listener := newTestSynapseWithMemoryAndWatcher(t)
-		syn.PatternWatcher.MinCount = 2
+		syn.PatternWatcher[0].SetMinCount(2)
 
 		derived1 := Event{EventType: CpuCritical, EventDomain: InfraDomain, Timestamp: time.Now()}
 		derived2 := Event{EventType: CpuCritical, EventDomain: InfraDomain, Timestamp: time.Now()}
@@ -317,11 +319,11 @@ func TestPatternWatcher_OnMaterialized_CountThreshold(t *testing.T) {
 
 		// First occurrence
 		syn.Memory.OnMaterialized(derived1, contributors, "ruleA")
-		syn.PatternWatcher.OnMaterialized(derived1, contributors, "ruleA")
+		syn.PatternWatcher[0].OnMaterialized(derived1, contributors, "ruleA")
 
 		// Second occurrence
 		syn.Memory.OnMaterialized(derived2, contributors, "ruleA")
-		syn.PatternWatcher.OnMaterialized(derived2, contributors, "ruleA")
+		syn.PatternWatcher[0].OnMaterialized(derived2, contributors, "ruleA")
 
 		matches := listener.All()
 		require.Len(t, matches, 1)
@@ -330,7 +332,7 @@ func TestPatternWatcher_OnMaterialized_CountThreshold(t *testing.T) {
 
 	t.Run("fires on every occurrence after MinCount", func(t *testing.T) {
 		syn, _, listener := newTestSynapseWithMemoryAndWatcher(t)
-		syn.PatternWatcher.MinCount = 2
+		syn.PatternWatcher[0].SetMinCount(2)
 
 		contributors := []Event{
 			{EventType: CpuStatusChanged, EventDomain: InfraDomain, Timestamp: time.Now()},
@@ -339,17 +341,17 @@ func TestPatternWatcher_OnMaterialized_CountThreshold(t *testing.T) {
 		// First occurrence - should not fire
 		derived1 := Event{EventType: CpuCritical, EventDomain: InfraDomain, Timestamp: time.Now()}
 		syn.Memory.OnMaterialized(derived1, contributors, "ruleA")
-		syn.PatternWatcher.OnMaterialized(derived1, contributors, "ruleA")
+		syn.PatternWatcher[0].OnMaterialized(derived1, contributors, "ruleA")
 
 		// Second occurrence - should fire
 		derived2 := Event{EventType: CpuCritical, EventDomain: InfraDomain, Timestamp: time.Now()}
 		syn.Memory.OnMaterialized(derived2, contributors, "ruleA")
-		syn.PatternWatcher.OnMaterialized(derived2, contributors, "ruleA")
+		syn.PatternWatcher[0].OnMaterialized(derived2, contributors, "ruleA")
 
 		// Third occurrence - should fire
 		derived3 := Event{EventType: CpuCritical, EventDomain: InfraDomain, Timestamp: time.Now()}
 		syn.Memory.OnMaterialized(derived3, contributors, "ruleA")
-		syn.PatternWatcher.OnMaterialized(derived3, contributors, "ruleA")
+		syn.PatternWatcher[0].OnMaterialized(derived3, contributors, "ruleA")
 
 		matches := listener.All()
 		require.Len(t, matches, 2)
@@ -359,7 +361,7 @@ func TestPatternWatcher_OnMaterialized_CountThreshold(t *testing.T) {
 
 	t.Run("fires when MinCount is 1", func(t *testing.T) {
 		syn, _, listener := newTestSynapseWithMemoryAndWatcher(t)
-		syn.PatternWatcher.MinCount = 1
+		syn.PatternWatcher[0].SetMinCount(1)
 
 		derived := Event{EventType: CpuCritical, EventDomain: InfraDomain, Timestamp: time.Now()}
 		contributors := []Event{
@@ -368,7 +370,7 @@ func TestPatternWatcher_OnMaterialized_CountThreshold(t *testing.T) {
 
 		// First occurrence - should fire with MinCount=1
 		syn.Memory.OnMaterialized(derived, contributors, "ruleA")
-		syn.PatternWatcher.OnMaterialized(derived, contributors, "ruleA")
+		syn.PatternWatcher[0].OnMaterialized(derived, contributors, "ruleA")
 
 		matches := listener.All()
 		require.Len(t, matches, 1)
@@ -379,8 +381,8 @@ func TestPatternWatcher_OnMaterialized_CountThreshold(t *testing.T) {
 func TestPatternWatcher_OnMaterialized_DifferentDepths(t *testing.T) {
 	t.Run("works with depth 1", func(t *testing.T) {
 		syn, _, listener := newTestSynapseWithMemoryAndWatcher(t)
-		syn.PatternWatcher.Depth = 1
-		syn.PatternWatcher.MinCount = 2
+		syn.PatternWatcher[0].SetDepth(1)
+		syn.PatternWatcher[0].SetMinCount(2)
 
 		derived1 := Event{EventType: CpuCritical, EventDomain: InfraDomain, Timestamp: time.Now()}
 		derived2 := Event{EventType: CpuCritical, EventDomain: InfraDomain, Timestamp: time.Now()}
@@ -389,10 +391,10 @@ func TestPatternWatcher_OnMaterialized_DifferentDepths(t *testing.T) {
 		}
 
 		syn.Memory.OnMaterialized(derived1, contributors, "ruleA")
-		syn.PatternWatcher.OnMaterialized(derived1, contributors, "ruleA")
+		syn.PatternWatcher[0].OnMaterialized(derived1, contributors, "ruleA")
 
 		syn.Memory.OnMaterialized(derived2, contributors, "ruleA")
-		syn.PatternWatcher.OnMaterialized(derived2, contributors, "ruleA")
+		syn.PatternWatcher[0].OnMaterialized(derived2, contributors, "ruleA")
 
 		matches := listener.All()
 		require.Len(t, matches, 1)
@@ -401,8 +403,8 @@ func TestPatternWatcher_OnMaterialized_DifferentDepths(t *testing.T) {
 
 	t.Run("works with depth 2", func(t *testing.T) {
 		syn, _, listener := newTestSynapseWithMemoryAndWatcher(t)
-		syn.PatternWatcher.Depth = 2
-		syn.PatternWatcher.MinCount = 2
+		syn.PatternWatcher[0].SetDepth(2)
+		syn.PatternWatcher[0].SetMinCount(2)
 
 		derived1 := Event{EventType: CpuCritical, EventDomain: InfraDomain, Timestamp: time.Now()}
 		derived2 := Event{EventType: CpuCritical, EventDomain: InfraDomain, Timestamp: time.Now()}
@@ -411,10 +413,10 @@ func TestPatternWatcher_OnMaterialized_DifferentDepths(t *testing.T) {
 		}
 
 		syn.Memory.OnMaterialized(derived1, contributors, "ruleA")
-		syn.PatternWatcher.OnMaterialized(derived1, contributors, "ruleA")
+		syn.PatternWatcher[0].OnMaterialized(derived1, contributors, "ruleA")
 
 		syn.Memory.OnMaterialized(derived2, contributors, "ruleA")
-		syn.PatternWatcher.OnMaterialized(derived2, contributors, "ruleA")
+		syn.PatternWatcher[0].OnMaterialized(derived2, contributors, "ruleA")
 
 		matches := listener.All()
 		require.Len(t, matches, 1)
@@ -425,7 +427,7 @@ func TestPatternWatcher_OnMaterialized_DifferentDepths(t *testing.T) {
 func TestPatternWatcher_OnMaterialized_PatternMatchContent(t *testing.T) {
 	t.Run("includes correct pattern match fields", func(t *testing.T) {
 		syn, _, listener := newTestSynapseWithMemoryAndWatcher(t)
-		syn.PatternWatcher.MinCount = 2
+		syn.PatternWatcher[0].SetMinCount(2)
 
 		derived1 := Event{
 			EventType:   CpuCritical,
@@ -451,10 +453,10 @@ func TestPatternWatcher_OnMaterialized_PatternMatchContent(t *testing.T) {
 		ruleID := "test-rule-123"
 
 		syn.Memory.OnMaterialized(derived1, contributors, ruleID)
-		syn.PatternWatcher.OnMaterialized(derived1, contributors, ruleID)
+		syn.PatternWatcher[0].OnMaterialized(derived1, contributors, ruleID)
 
 		syn.Memory.OnMaterialized(derived2, contributors, ruleID)
-		syn.PatternWatcher.OnMaterialized(derived2, contributors, ruleID)
+		syn.PatternWatcher[0].OnMaterialized(derived2, contributors, ruleID)
 
 		matches := listener.All()
 		require.Len(t, matches, 1)
@@ -477,7 +479,7 @@ func TestPatternWatcher_OnMaterialized_PatternMatchContent(t *testing.T) {
 func TestPatternWatcher_OnMaterialized_DifferentEventTypes(t *testing.T) {
 	t.Run("tracks different event types separately", func(t *testing.T) {
 		syn, _, listener := newTestSynapseWithMemoryAndWatcher(t)
-		syn.PatternWatcher.MinCount = 2
+		syn.PatternWatcher[0].SetMinCount(2)
 
 		contributors := []Event{
 			{EventType: CpuStatusChanged, EventDomain: InfraDomain, Timestamp: time.Now()},
@@ -487,17 +489,17 @@ func TestPatternWatcher_OnMaterialized_DifferentEventTypes(t *testing.T) {
 		cpu1 := Event{EventType: CpuCritical, EventDomain: InfraDomain, Timestamp: time.Now()}
 		cpu2 := Event{EventType: CpuCritical, EventDomain: InfraDomain, Timestamp: time.Now()}
 		syn.Memory.OnMaterialized(cpu1, contributors, "ruleA")
-		syn.PatternWatcher.OnMaterialized(cpu1, contributors, "ruleA")
+		syn.PatternWatcher[0].OnMaterialized(cpu1, contributors, "ruleA")
 		syn.Memory.OnMaterialized(cpu2, contributors, "ruleA")
-		syn.PatternWatcher.OnMaterialized(cpu2, contributors, "ruleA")
+		syn.PatternWatcher[0].OnMaterialized(cpu2, contributors, "ruleA")
 
 		// Materialize MemoryCritical twice
 		mem1 := Event{EventType: MemoryCritical, EventDomain: InfraDomain, Timestamp: time.Now()}
 		mem2 := Event{EventType: MemoryCritical, EventDomain: InfraDomain, Timestamp: time.Now()}
 		syn.Memory.OnMaterialized(mem1, contributors, "ruleB")
-		syn.PatternWatcher.OnMaterialized(mem1, contributors, "ruleB")
+		syn.PatternWatcher[0].OnMaterialized(mem1, contributors, "ruleB")
 		syn.Memory.OnMaterialized(mem2, contributors, "ruleB")
-		syn.PatternWatcher.OnMaterialized(mem2, contributors, "ruleB")
+		syn.PatternWatcher[0].OnMaterialized(mem2, contributors, "ruleB")
 
 		matches := listener.All()
 		require.Len(t, matches, 2)
