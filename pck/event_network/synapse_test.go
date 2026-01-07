@@ -9,11 +9,15 @@ import (
 func Test_WithComplexRules(t *testing.T) {
 
 	listener := NewPatternListenerPoc()
+	configs := []PatternConfig{
+		{
+			Depth:           4,
+			MinCount:        1,
+			PatternListener: listener,
+		},
+	}
 
-	synapse := NewSynapse(listener, PatternConfig{
-		Depth:    4,
-		MinCount: 1,
-	})
+	synapse := NewSynapse(configs)
 
 	synapse.RegisterRule(CpuStatusChanged, NewDeriveEventRule("cpu_status_critical",
 		NewCondition().HasPeers(CpuStatusChanged, Conditions{
@@ -98,11 +102,17 @@ func Test_WithComplexRules(t *testing.T) {
 }
 
 func Test_CrossDomainEvents(t *testing.T) {
+	
 	listener := NewPatternListenerPoc()
-	synapse := NewSynapse(listener, PatternConfig{
-		Depth:    4,
-		MinCount: 5,
-	})
+	configs := []PatternConfig{
+		{
+			Depth:           4,
+			MinCount:        2,
+			PatternListener: listener,
+		},
+	}
+
+	synapse := NewSynapse(configs)
 
 	synapse.RegisterRule(ZebrasMigration, NewDeriveEventRule("1",
 		NewCondition().HasPeers(UnusualBirdBehavior,
@@ -172,15 +182,22 @@ func Test_CrossDomainEvents(t *testing.T) {
 		},
 		), getPotentialNaturalCatastrophicDerivedEventTemplate()))
 
+	ingestEvents(t, synapse)
+	ingestEvents(t, synapse)
+	ingestEvents(t, synapse)
+
+	PrintEventGraph(synapse.GetNetwork())
+
+}
+
+func ingestEvents(t *testing.T, synapse Synapse) {
 	_, err := synapse.Ingest(createZebrasEvent())
+	require.NoError(t, err)
 	_, err = synapse.Ingest(createUnusualBirdBehaviorEvent())
+	require.NoError(t, err)
 
 	for _, gEvent := range getMinorTremorsEvents() {
 		synapse.Ingest(gEvent)
 	}
-
-	require.NoError(t, err)
-
-	PrintEventGraph(synapse.GetNetwork())
 
 }

@@ -2,6 +2,8 @@ package event_network
 
 type PatternObserver interface {
 	OnMaterialized(derived Event, contributors []Event, ruleID string)
+	SetDepth(depth int)
+	SetMinCount(minCount int)
 }
 
 type PatternInstance struct {
@@ -13,7 +15,7 @@ type PatternInstance struct {
 	in  map[EventID][]Edge
 }
 
-type PatternRecognizer interface {
-	AddPattern(pattern NetworkTemplate)
-	OnRecognize(pattern NetworkTemplate, subNetwork PatternInstance)
-}
+//type PatternRecognizer interface {
+//	AddPattern(pattern NetworkTemplate)
+//	OnRecognize(pattern NetworkTemplate, subNetwork PatternInstance)
+//}
