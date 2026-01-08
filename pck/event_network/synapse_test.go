@@ -208,7 +208,137 @@ func Test_CrossDomainEvents(t *testing.T) {
 		), getPotentialNaturalCatastrophicDerivedEventTemplate()))
 
 	ingestEvents(t, synapse)
+	net := synapse.GetNetwork()
+
+	zebrasMigrations, _ := net.GetByType(ZebrasMigration)
+	unusualBirdBehaviors, _ := net.GetByType(UnusualBirdBehavior)
+	multipleAnimalUnexpectedBehaviors, _ := net.GetByType(MultipleAnimalUnexpectedBehavior)
+	highFrequencyOfMinorTremors, _ := net.GetByType(HighFrequencyOfMinorTremors)
+	minorTremors, _ := net.GetByType(MinorTremors)
+	potentialNaturalCatastrophes, _ := net.GetByType(PotentialNaturalCatastrophic)
+
+	require.Equal(t, 1, len(zebrasMigrations))
+	require.Equal(t, 1, len(unusualBirdBehaviors))
+	require.Equal(t, 1, len(multipleAnimalUnexpectedBehaviors))
+
+	require.Equal(t, 8, len(minorTremors))
+	require.Equal(t, 1, len(highFrequencyOfMinorTremors))
+
+	require.Equal(t, 1, len(potentialNaturalCatastrophes))
+
 	ingestEvents(t, synapse)
+
+	zebrasMigrations, _ = net.GetByType(ZebrasMigration)
+	unusualBirdBehaviors, _ = net.GetByType(UnusualBirdBehavior)
+	multipleAnimalUnexpectedBehaviors, _ = net.GetByType(MultipleAnimalUnexpectedBehavior)
+	highFrequencyOfMinorTremors, _ = net.GetByType(HighFrequencyOfMinorTremors)
+	minorTremors, _ = net.GetByType(MinorTremors)
+	potentialNaturalCatastrophes, _ = net.GetByType(PotentialNaturalCatastrophic)
+
+	require.Equal(t, 2, len(zebrasMigrations))
+	require.Equal(t, 2, len(unusualBirdBehaviors))
+	require.Equal(t, 2, len(multipleAnimalUnexpectedBehaviors))
+
+	require.Equal(t, 16, len(minorTremors))
+	require.Equal(t, 2, len(highFrequencyOfMinorTremors))
+
+	require.Equal(t, 2, len(potentialNaturalCatastrophes))
+
+	ingestEvents(t, synapse)
+
+	zebrasMigrations, _ = net.GetByType(ZebrasMigration)
+	unusualBirdBehaviors, _ = net.GetByType(UnusualBirdBehavior)
+	multipleAnimalUnexpectedBehaviors, _ = net.GetByType(MultipleAnimalUnexpectedBehavior)
+	highFrequencyOfMinorTremors, _ = net.GetByType(HighFrequencyOfMinorTremors)
+	minorTremors, _ = net.GetByType(MinorTremors)
+	potentialNaturalCatastrophes, _ = net.GetByType(PotentialNaturalCatastrophic)
+
+	require.Equal(t, 3, len(zebrasMigrations))
+	require.Equal(t, 3, len(unusualBirdBehaviors))
+	require.Equal(t, 3, len(multipleAnimalUnexpectedBehaviors))
+
+	require.Equal(t, 24, len(minorTremors))
+	require.Equal(t, 3, len(highFrequencyOfMinorTremors))
+
+	require.Equal(t, 3, len(potentialNaturalCatastrophes))
+
+	PrintEventGraph(synapse.GetNetwork())
+
+}
+
+func Test_CrossDomainEventsWithPatterns(t *testing.T) {
+
+	animalMovementListener := NewPatternListenerPoc()
+	geologicalListener := NewPatternListenerPoc()
+	configs := []PatternConfig{
+		{
+			Depth:           4,
+			MinCount:        3,
+			PatternListener: animalMovementListener,
+			Spec: WatchSpec{
+				DerivedTypes: map[EventType]struct{}{
+					"multiple_animal_unexpected_behavior": {},
+				},
+			},
+		},
+		{
+			Depth:           4,
+			MinCount:        3,
+			PatternListener: geologicalListener,
+			Spec: WatchSpec{
+				DerivedTypes: map[EventType]struct{}{
+					"high_frequency_of_minor_tremors": {},
+				},
+			},
+		},
+	}
+
+	synapse := NewSynapse(configs)
+
+	synapse.RegisterRule(ZebrasMigration, NewDeriveEventRule("1",
+		NewCondition().HasPeers(UnusualBirdBehavior,
+			Conditions{
+				Counter: &Counter{
+					HowMany:       1,
+					HowManyOrMore: true,
+				},
+				TimeWindow: &TimeWindow{
+					Within:   8,
+					TimeUnit: Hour,
+				},
+			},
+		), getAnimalObservationDerivedEventTemplate()))
+
+	synapse.RegisterRule(UnusualBirdBehavior, NewDeriveEventRule("2",
+		NewCondition().HasPeers(ZebrasMigration,
+			Conditions{
+				Counter: &Counter{
+					HowMany:       1,
+					HowManyOrMore: true,
+				},
+				TimeWindow: &TimeWindow{
+					Within:   8,
+					TimeUnit: Hour,
+				},
+			},
+		), getAnimalObservationDerivedEventTemplate()))
+
+	synapse.RegisterRule(MinorTremors, NewDeriveEventRule("2",
+		NewCondition().HasPeers(MinorTremors,
+			Conditions{
+				Counter: &Counter{
+					HowMany:       5,
+					HowManyOrMore: true,
+				},
+				TimeWindow: &TimeWindow{
+					Within:   8,
+					TimeUnit: Hour,
+				},
+			},
+		), getMinorTremorDerivedEventTemplate()))
+
+	ingestEvents(t, synapse)
+
 	ingestEvents(t, synapse)
 
 	PrintEventGraph(synapse.GetNetwork())

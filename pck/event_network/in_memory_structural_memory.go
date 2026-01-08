@@ -272,16 +272,16 @@ func (m *InMemoryStructuralMemory) GetLineageStats(key LineageKey) (LineageStats
 	return *st, true
 }
 
-// ListLineages implements PatternMemory.
-func (m *InMemoryStructuralMemory) ListLineages() []LineageKey {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	out := make([]LineageKey, 0, len(m.lineageStats))
-	for k := range m.lineageStats {
-		out = append(out, k)
-	}
-	return out
-}
+//// ListLineages implements PatternMemory.
+//func (m *InMemoryStructuralMemory) ListLineages() []LineageKey {
+//	m.mu.RLock()
+//	defer m.mu.RUnlock()
+//	out := make([]LineageKey, 0, len(m.lineageStats))
+//	for k := range m.lineageStats {
+//		out = append(out, k)
+//	}
+//	return out
+//}
 
 // ensureEventSigsLocked creates signature slots for the event if missing.
 // It writes Sig0 and also pre-fills SigK for leaves (no contributors) deterministically.

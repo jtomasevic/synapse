@@ -463,58 +463,59 @@ func (e *EventExpression) invertedRelationMatch(
 	return e.applyConditions(matched, eventType, cond)
 }
 
-func (e *EventExpression) applyConditionsForSiblings(
-	events []Event,
-	eventType string,
-	cond Conditions,
-) (bool, []Event, error) {
-
-	anchorTS := e.Event.Timestamp
-	matches := 0
-
-	result := []Event{}
-
-	for _, ev := range events {
-		//if eventType != "" && ev.EventType != EventType(eventType) {
-		//	continue
-		//}
-		// disable strict type filter when checking descendants of same type
-		if ev.EventType != eventType {
-			continue
-		}
-
-		if cond.TimeWindow != nil {
-			d := cond.TimeWindow.TimeUnit.ToDuration(cond.TimeWindow.Within)
-			if ev.Timestamp.Before(anchorTS.Add(-d)) || ev.Timestamp.After(anchorTS) {
-				continue
-			}
-		}
-
-		if cond.PropertyValues != nil {
-			ok := true
-			for k, v := range cond.PropertyValues {
-				if ev.Properties[k] != v {
-					ok = false
-					break
-				}
-			}
-			if !ok {
-				continue
-			}
-		}
-		result = append(result, ev)
-		matches++
-	}
-
-	if cond.Counter != nil {
-		if cond.Counter.HowManyOrMore {
-			return matches >= cond.Counter.HowMany, result, nil
-		}
-		return matches == cond.Counter.HowMany, result, nil
-	}
-
-	return matches > 0, result, nil
-}
+//
+//func (e *EventExpression) applyConditionsForSiblings(
+//	events []Event,
+//	eventType string,
+//	cond Conditions,
+//) (bool, []Event, error) {
+//
+//	anchorTS := e.Event.Timestamp
+//	matches := 0
+//
+//	result := []Event{}
+//
+//	for _, ev := range events {
+//		//if eventType != "" && ev.EventType != EventType(eventType) {
+//		//	continue
+//		//}
+//		// disable strict type filter when checking descendants of same type
+//		if ev.EventType != eventType {
+//			continue
+//		}
+//
+//		if cond.TimeWindow != nil {
+//			d := cond.TimeWindow.TimeUnit.ToDuration(cond.TimeWindow.Within)
+//			if ev.Timestamp.Before(anchorTS.Add(-d)) || ev.Timestamp.After(anchorTS) {
+//				continue
+//			}
+//		}
+//
+//		if cond.PropertyValues != nil {
+//			ok := true
+//			for k, v := range cond.PropertyValues {
+//				if ev.Properties[k] != v {
+//					ok = false
+//					break
+//				}
+//			}
+//			if !ok {
+//				continue
+//			}
+//		}
+//		result = append(result, ev)
+//		matches++
+//	}
+//
+//	if cond.Counter != nil {
+//		if cond.Counter.HowManyOrMore {
+//			return matches >= cond.Counter.HowMany, result, nil
+//		}
+//		return matches == cond.Counter.HowMany, result, nil
+//	}
+//
+//	return matches > 0, result, nil
+//}
 
 func (e *EventExpression) applyConditions(
 	events []Event,
