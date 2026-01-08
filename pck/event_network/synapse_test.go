@@ -268,13 +268,45 @@ func Test_CrossDomainEvents(t *testing.T) {
 
 func Test_CrossDomainEventsWithPatterns(t *testing.T) {
 
-	animalMovementListener := NewPatternListenerPoc()
-	geologicalListener := NewPatternListenerPoc()
+	// Create a composite listener that will forward to composition watcher
+	compositeListener := NewCompositePatternListener(nil)
+
+	// Create composition listener to capture composition matches
+	compositionTestListener := &testCompositionListener{}
+
+	// Set up composition spec
+	compositionSpec := PatternCompositionSpec{
+		RequiredPatterns: map[PatternIdentifier]struct{}{
+			{EventType: MultipleAnimalUnexpectedBehavior, EventDomain: AnimalObservation}: {},
+			{EventType: HighFrequencyOfMinorTremors, EventDomain: Geology}:                {},
+		},
+		TimeWindow: &TimeWindow{
+			Within:   8,
+			TimeUnit: Hour,
+		},
+		MinOccurrences: map[PatternIdentifier]int{
+			{EventType: MultipleAnimalUnexpectedBehavior, EventDomain: AnimalObservation}: 1,
+			{EventType: HighFrequencyOfMinorTremors, EventDomain: Geology}:                1,
+		},
+		DerivedEventTemplate: getPotentialNaturalCatastrophicDerivedEventTemplate(),
+		CompositionID:        "cross-domain-catastrophe-pattern",
+	}
+
+	// Create composition watcher (will set synapse after creation)
+	compositionWatcher := NewPatternCompositionWatcher(
+		compositionSpec,
+		nil, // Will set synapse after synapse is created
+		compositionTestListener,
+	)
+
+	// Add composition watcher to composite listener
+	compositeListener.AddCompositionWatcher(compositionWatcher)
+
 	configs := []PatternConfig{
 		{
 			Depth:           4,
 			MinCount:        3,
-			PatternListener: animalMovementListener,
+			PatternListener: compositeListener, // Use composite listener
 			Spec: WatchSpec{
 				DerivedTypes: map[EventType]struct{}{
 					"multiple_animal_unexpected_behavior": {},
@@ -284,7 +316,7 @@ func Test_CrossDomainEventsWithPatterns(t *testing.T) {
 		{
 			Depth:           4,
 			MinCount:        3,
-			PatternListener: geologicalListener,
+			PatternListener: compositeListener, // Use composite listener
 			Spec: WatchSpec{
 				DerivedTypes: map[EventType]struct{}{
 					"high_frequency_of_minor_tremors": {},
@@ -294,6 +326,9 @@ func Test_CrossDomainEventsWithPatterns(t *testing.T) {
 	}
 
 	synapse := NewSynapse(configs)
+
+	// Set the synapse on composition watcher now that synapse is created
+	compositionWatcher.Synapse = synapse
 
 	synapse.RegisterRule(ZebrasMigration, NewDeriveEventRule("1",
 		NewCondition().HasPeers(UnusualBirdBehavior,
@@ -337,9 +372,48 @@ func Test_CrossDomainEventsWithPatterns(t *testing.T) {
 			},
 		), getMinorTremorDerivedEventTemplate()))
 
+	// First ingestion - should create patterns but not trigger composition yet
 	ingestEvents(t, synapse)
 
+	// Check that patterns are being recognized
+	net := synapse.GetNetwork()
+	multipleAnimalUnexpectedBehaviors, _ := net.GetByType(MultipleAnimalUnexpectedBehavior)
+	highFrequencyOfMinorTremors, _ := net.GetByType(HighFrequencyOfMinorTremors)
+
+	require.GreaterOrEqual(t, len(multipleAnimalUnexpectedBehaviors), 1, "should have at least one MultipleAnimalUnexpectedBehavior")
+	require.GreaterOrEqual(t, len(highFrequencyOfMinorTremors), 1, "should have at least one HighFrequencyOfMinorTremors")
+
+	// Second ingestion - should trigger pattern recognition and composition
 	ingestEvents(t, synapse)
+
+	// After multiple ingestions, patterns should be recognized and composition should be triggered
+	ingestEvents(t, synapse)
+
+	// Verify composition was recognized
+	compositionMatches := compositionTestListener.All()
+	require.GreaterOrEqual(t, len(compositionMatches), 1, "should have at least one composition match")
+
+	// Verify the derived event was created
+	potentialNaturalCatastrophes, _ := net.GetByType(PotentialNaturalCatastrophic)
+	require.GreaterOrEqual(t, len(potentialNaturalCatastrophes), 1, "should have at least one PotentialNaturalCatastrophic event from pattern composition")
+
+	// Verify composition match details
+	composition := compositionMatches[0]
+	require.Equal(t, PotentialNaturalCatastrophic, composition.DerivedEvent.EventType)
+	require.Equal(t, NaturalDisasterWarningSystem, composition.DerivedEvent.EventDomain)
+	require.Equal(t, "cross-domain-catastrophe-pattern", composition.DerivedEvent.Properties["composition_id"])
+	require.Len(t, composition.Patterns, 2, "composition should include both patterns")
+
+	// Verify both patterns are in the composition
+	patternTypes := make(map[EventType]bool)
+	for _, pattern := range composition.Patterns {
+		patternTypes[pattern.Key.DerivedType] = true
+	}
+	require.True(t, patternTypes[MultipleAnimalUnexpectedBehavior], "composition should include MultipleAnimalUnexpectedBehavior pattern")
+	require.True(t, patternTypes[HighFrequencyOfMinorTremors], "composition should include HighFrequencyOfMinorTremors pattern")
+
+	potentialNaturalCatastrophic, _ := net.GetByType(PotentialNaturalCatastrophic)
+	require.Equal(t, 1, len(potentialNaturalCatastrophic))
 
 	PrintEventGraph(synapse.GetNetwork())
 

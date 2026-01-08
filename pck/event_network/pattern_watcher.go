@@ -80,6 +80,11 @@ func (w *PatternWatcher) SetMinCount(minCount int) {
 	w.MinCount = minCount
 }
 
+// SetListener updates the pattern listener
+func (w *PatternWatcher) SetListener(listener PatternListener) {
+	w.Listener = listener
+}
+
 // OnMaterialized should be called *after*:
 //  1. derived event added
 //  2. all contributor -> derived edges added
