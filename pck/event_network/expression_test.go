@@ -140,23 +140,6 @@ func TestExpression_HasDescendants_WithCount(t *testing.T) {
 	require.True(t, ok)
 }
 
-func TestExpression_ChildrenContainsPredicate(t *testing.T) {
-	net, parents, _ := buildInfraSubGraph(t)
-
-	// Derived event
-	ev, _ := net.GetByID(parents.CpuCriticalID)
-
-	ok, _, err := NewExpression(net, &ev).
-		ChildrenContains(func(e *Event) bool {
-			// Under Option A, children are semantic nodes returned by EventNetwork.Children
-			return e.EventType == CpuCritical
-		}).
-		Eval()
-
-	require.NoError(t, err)
-	require.True(t, ok)
-}
-
 func TestExpression_TimeWindow(t *testing.T) {
 	net, parents, _ := buildInfraSubGraph(t)
 
@@ -647,7 +630,7 @@ func TestExpression_GroupAndOrPrecedence(t *testing.T) {
 			And().
 			HasSiblings(CpuStatusChanged, Conditions{Counter: &Counter{HowMany: 2}}).
 			Ungroup().
-			Or().                                               // <- because of OR whatever is below it will pass, so result will be True
+			Or(). // <- because of OR whatever is below it will pass, so result will be True
 			HasCousin(MemoryCritical, Conditions{MaxDepth: 1}). // <- false
 			Eval()
 
@@ -1216,34 +1199,6 @@ func TestExpression_ToRPN_EdgeCases(t *testing.T) {
 }
 
 func TestExpression_EvalTerm_EdgeCases(t *testing.T) {
-	t.Run("termPredicate", func(t *testing.T) {
-		net, parents, _ := buildInfraSubGraph(t)
-		ev, _ := net.GetByID(parents.CpuCriticalID)
-
-		// termPredicate applies to the anchor event itself
-		ok, _, err := NewExpression(net, &ev).
-			ChildrenContains(func(e *Event) bool {
-				return e.EventType == CpuCritical
-			}).
-			Eval()
-
-		require.NoError(t, err)
-		require.True(t, ok)
-	})
-
-	t.Run("termPredicate returns false", func(t *testing.T) {
-		net, parents, _ := buildInfraSubGraph(t)
-		ev, _ := net.GetByID(parents.CpuCriticalID)
-
-		ok, _, err := NewExpression(net, &ev).
-			ChildrenContains(func(e *Event) bool {
-				return e.EventType == MemoryStatusChanged
-			}).
-			Eval()
-
-		require.NoError(t, err)
-		require.False(t, ok)
-	})
 
 	t.Run("HasCousin with error handling", func(t *testing.T) {
 		net, _, childs := buildInfraSubGraph(t)

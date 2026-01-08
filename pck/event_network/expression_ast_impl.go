@@ -34,7 +34,6 @@ const (
 	termHasSiblings
 	termHasPeers
 	termHasCousin
-	termPredicate
 )
 
 type term struct {
@@ -42,7 +41,6 @@ type term struct {
 	eventType string
 	domain    EventDomain
 	cond      Conditions
-	predicate Predicate
 }
 
 type token struct {
@@ -180,14 +178,6 @@ func (e *EventExpression) HasCousin(eventType string, cond Conditions) *EventExp
 	return e
 }
 
-func (e *EventExpression) ChildrenContains(p Predicate) *EventExpression {
-	e.tokens = append(e.tokens, token{
-		kind: tkTerm,
-		term: term{kind: termPredicate, predicate: p},
-	})
-	return e
-}
-
 /*
 ========================
 Evaluation
@@ -295,8 +285,6 @@ func (e *EventExpression) evalTerm(t term) (bool, []Event, error) {
 		}
 		return e.applyConditions(cous, t.eventType, t.cond)
 
-	case termPredicate:
-		return t.predicate(e.Event), nil, nil
 	}
 
 	return false, nil, nil
@@ -683,17 +671,5 @@ func (e *EventExpression) derivedDescendantsByParents(of EventID, maxDepth int) 
 }
 
 func (e *EventExpression) IsAnyOfTypes(eventTypes []string, condition Conditions) *EventExpression {
-	panic("Implement me!")
-}
-
-func (e *EventExpression) DescendantsContains(predicate Predicate) *EventExpression {
-	panic("Implement me!")
-}
-
-func (e *EventExpression) SiblingsContains(predicate Predicate) *EventExpression {
-	panic("Implement me!")
-}
-
-func (e *EventExpression) CousinContains(predicate Predicate) *EventExpression {
 	panic("Implement me!")
 }

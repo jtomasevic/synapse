@@ -2,10 +2,28 @@
 package event_network
 
 import (
-	"encoding/json"
-	"fmt"
 	"time"
 )
+
+type WatchSpec struct {
+	// If empty => watch all
+	DerivedTypes map[EventType]struct{}
+	Domains      map[EventDomain]struct{}
+}
+
+func (s WatchSpec) Allows(derived Event) bool {
+	if s.DerivedTypes != nil {
+		if _, ok := s.DerivedTypes[derived.EventType]; !ok {
+			return false
+		}
+	}
+	if s.Domains != nil {
+		if _, ok := s.Domains[derived.EventDomain]; !ok {
+			return false
+		}
+	}
+	return true
+}
 
 // PatternMatch is what we get when a repeated pattern is detected.
 //
@@ -26,25 +44,6 @@ type PatternMatch struct {
 	AnchorCandidate *EventID
 }
 
-// PatternListener is  “fire event or method call” sink.
-type PatternListener interface {
-	OnPatternRepeated(match PatternMatch)
-}
-
-func NewPatternListenerPoc() *PatternListenerPoc {
-	return &PatternListenerPoc{}
-}
-
-type PatternListenerPoc struct {
-}
-
-func (p *PatternListenerPoc) OnPatternRepeated(match PatternMatch) {
-	str, _ := json.MarshalIndent(match, "", "	")
-	fmt.Println("PATTERN REPEATED --------------")
-	fmt.Println(string(str))
-	fmt.Println("-------------------------------")
-}
-
 // PatternWatcher is the glue between StructuralMemory/PatternMemory
 // and “action” when patterns repeat.
 //
@@ -63,22 +62,14 @@ type PatternWatcher struct {
 	MinCount int
 
 	Listener PatternListener
+	Spec     WatchSpec
 }
 
 type PatternConfig struct {
 	Depth           int
 	MinCount        int
+	Spec            WatchSpec
 	PatternListener PatternListener
-}
-
-// NewPatternWatcher creates a watcher.
-func NewPatternWatcher(mem PatternMemory, config PatternConfig) *PatternWatcher {
-	return &PatternWatcher{
-		Mem:      mem,
-		Depth:    config.Depth,
-		MinCount: config.MinCount,
-		Listener: config.PatternListener,
-	}
 }
 
 func (w *PatternWatcher) SetDepth(depth int) {
@@ -98,6 +89,10 @@ func (w *PatternWatcher) SetMinCount(minCount int) {
 // - in SynapseRuntime.materializeDerived(...) right after Memory.OnMaterialized(...)
 func (w *PatternWatcher) OnMaterialized(derived Event, contributors []Event, ruleID string) {
 	if w == nil || w.Mem == nil || w.Listener == nil {
+		return
+	}
+
+	if !w.Spec.Allows(derived) {
 		return
 	}
 
