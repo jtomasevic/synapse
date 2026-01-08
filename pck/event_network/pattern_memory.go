@@ -40,7 +40,7 @@ type PatternMemory interface {
 
 	// GetLineageStats LineageKey identifies a *class* of patterns (NOT concrete IDs).
 	GetLineageStats(key LineageKey) (LineageStats, bool)
-	ListLineages() []LineageKey
+	// ListLineages() []LineageKey
 }
 
 // LineageKey is a normalized identifier for a multi-hop derivation pattern.

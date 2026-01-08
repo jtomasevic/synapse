@@ -36,7 +36,7 @@ func HashEventBase(ev Event) uint64 {
 	// Prefer: include only keys that matter for grouping (e.g., "status=critical").
 	// We can replace this with a curated/normalized props hash.
 	if ev.Properties != nil {
-		// Order-independent hashing of keys.
+		// TODO: Order-independent hashing of keys.
 		//keys := make([]string, 0, len(ev.Properties))
 		//for k := range ev.Properties {
 		//	keys = append(keys, k)

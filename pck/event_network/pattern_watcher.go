@@ -134,7 +134,7 @@ func (w *PatternWatcher) OnMaterialized(derived Event, contributors []Event, rul
 	w.Listener.OnPatternRepeated(PatternMatch{
 		Key:            key,
 		Occurrence:     stats.Count,
-		At:             time.Now(),
+		At:             derived.Timestamp,
 		DerivedID:      derived.ID,
 		RuleID:         ruleID,
 		ContributorIDs: collectIDs(contributors),

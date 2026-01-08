@@ -98,16 +98,26 @@ func findEarliestDate(events []Event) time.Time {
 
 func (s *SynapseRuntime) materializeDerived(anchor Event, matched []Event, rule Rule) (Event, error) {
 	template := rule.GetActionTemplate()
+	contributors := append(append([]Event(nil), matched...), anchor) // same as today :contentReference[oaicite:5]{index=5}
+	return s.materializeFromTemplate(template, contributors, rule.GetID())
+}
 
+// Materialize a derived event from a template + explicit contributors.
+// originID can be ruleID or patternID. No rules executed here.
+func (s *SynapseRuntime) materializeFromTemplate(
+	template EventTemplate,
+	contributors []Event,
+	originID string,
+) (Event, error) {
 	derived := Event{
 		EventType:   template.EventType,
 		EventDomain: template.EventDomain,
 		Properties:  template.EventProps,
 	}
-	// contributors = matched + anchor
-	contributors := append(append([]Event(nil), matched...), anchor)
-	derived.Timestamp = findEarliestDate(contributors)
-	// IMPORTANT: do NOT call s.Ingest here (that would run rules before edges exist).
+
+	derived.Timestamp = findEarliestDate(contributors) // matches existing behavior :contentReference[oaicite:2]{index=2}
+
+	// IMPORTANT: do NOT call s.Ingest here (edges must exist first). :contentReference[oaicite:3]{index=3}
 	id, err := s.Network.AddEvent(derived)
 	if err != nil {
 		return Event{}, err
@@ -120,13 +130,11 @@ func (s *SynapseRuntime) materializeDerived(anchor Event, matched []Event, rule 
 		}
 	}
 
-	// Semantic commit point for caching/pattern memory
 	if s.Memory != nil {
-		s.Memory.OnMaterialized(derived, contributors, rule.GetID())
-		for _, w := range s.PatternWatcher {
-			w.OnMaterialized(derived, contributors, rule.GetID())
+		s.Memory.OnMaterialized(derived, contributors, originID)
+		for _, w := range s.PatternWatcher { // your newer version already supports multi :contentReference[oaicite:4]{index=4}
+			w.OnMaterialized(derived, contributors, originID)
 		}
-		//s.PatternWatcher.OnMaterialized(derived, contributors, rule.GetID())
 	}
 
 	return derived, nil
