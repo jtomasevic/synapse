@@ -16,6 +16,7 @@ func NewSynapse(patternConfig []PatternConfig) *SynapseRuntime {
 		watcher := NewPatternWatcher(memory, PatternConfig{
 			Depth:           config.Depth,
 			MinCount:        config.MinCount,
+			Spec:            config.Spec,
 			PatternListener: config.PatternListener,
 		})
 		watchers = append(watchers, watcher)

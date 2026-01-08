@@ -213,7 +213,7 @@ func TestPatternWatcher_OnMaterialized_NilChecks(t *testing.T) {
 func TestPatternWatcher_OnMaterialized_DepthValidation(t *testing.T) {
 	t.Run("returns early when depth is negative", func(t *testing.T) {
 		syn, _, listener := newTestSynapseWithMemoryAndWatcher(t)
-		syn.PatternWatcher[0].SetDepth(-1)
+		syn.PatternWatcher[0].(*PatternWatcher).Depth = -1
 
 		derived := Event{EventType: CpuCritical, EventDomain: InfraDomain, Timestamp: time.Now()}
 		contributors := []Event{
@@ -230,7 +230,7 @@ func TestPatternWatcher_OnMaterialized_DepthValidation(t *testing.T) {
 	t.Run("returns early when depth exceeds MaxSignatureDepth", func(t *testing.T) {
 		syn, mem, listener := newTestSynapseWithMemoryAndWatcher(t)
 		maxDepth := mem.MaxSignatureDepth()
-		syn.PatternWatcher[0].SetDepth(maxDepth + 1)
+		syn.PatternWatcher[0].(*PatternWatcher).Depth = maxDepth + 1
 
 		derived := Event{EventType: CpuCritical, EventDomain: InfraDomain, Timestamp: time.Now()}
 		contributors := []Event{
@@ -292,7 +292,7 @@ func TestPatternWatcher_OnMaterialized_StatsFailure(t *testing.T) {
 func TestPatternWatcher_OnMaterialized_CountThreshold(t *testing.T) {
 	t.Run("does not fire when Count < MinCount", func(t *testing.T) {
 		syn, _, listener := newTestSynapseWithMemoryAndWatcher(t)
-		syn.PatternWatcher[0].SetMinCount(2)
+		syn.PatternWatcher[0].(*PatternWatcher).MinCount = 2
 
 		derived := Event{EventType: CpuCritical, EventDomain: InfraDomain, Timestamp: time.Now()}
 		contributors := []Event{
@@ -309,7 +309,7 @@ func TestPatternWatcher_OnMaterialized_CountThreshold(t *testing.T) {
 
 	t.Run("fires on second occurrence when MinCount is 2", func(t *testing.T) {
 		syn, _, listener := newTestSynapseWithMemoryAndWatcher(t)
-		syn.PatternWatcher[0].SetMinCount(2)
+		syn.PatternWatcher[0].(*PatternWatcher).MinCount = 2
 
 		derived1 := Event{EventType: CpuCritical, EventDomain: InfraDomain, Timestamp: time.Now()}
 		derived2 := Event{EventType: CpuCritical, EventDomain: InfraDomain, Timestamp: time.Now()}
@@ -332,7 +332,7 @@ func TestPatternWatcher_OnMaterialized_CountThreshold(t *testing.T) {
 
 	t.Run("fires on every occurrence after MinCount", func(t *testing.T) {
 		syn, _, listener := newTestSynapseWithMemoryAndWatcher(t)
-		syn.PatternWatcher[0].SetMinCount(2)
+		syn.PatternWatcher[0].(*PatternWatcher).MinCount = 2
 
 		contributors := []Event{
 			{EventType: CpuStatusChanged, EventDomain: InfraDomain, Timestamp: time.Now()},
@@ -361,7 +361,7 @@ func TestPatternWatcher_OnMaterialized_CountThreshold(t *testing.T) {
 
 	t.Run("fires when MinCount is 1", func(t *testing.T) {
 		syn, _, listener := newTestSynapseWithMemoryAndWatcher(t)
-		syn.PatternWatcher[0].SetMinCount(1)
+		syn.PatternWatcher[0].(*PatternWatcher).MinCount = 1
 
 		derived := Event{EventType: CpuCritical, EventDomain: InfraDomain, Timestamp: time.Now()}
 		contributors := []Event{
@@ -381,8 +381,8 @@ func TestPatternWatcher_OnMaterialized_CountThreshold(t *testing.T) {
 func TestPatternWatcher_OnMaterialized_DifferentDepths(t *testing.T) {
 	t.Run("works with depth 1", func(t *testing.T) {
 		syn, _, listener := newTestSynapseWithMemoryAndWatcher(t)
-		syn.PatternWatcher[0].SetDepth(1)
-		syn.PatternWatcher[0].SetMinCount(2)
+		syn.PatternWatcher[0].(*PatternWatcher).Depth = 1
+		syn.PatternWatcher[0].(*PatternWatcher).MinCount = 2
 
 		derived1 := Event{EventType: CpuCritical, EventDomain: InfraDomain, Timestamp: time.Now()}
 		derived2 := Event{EventType: CpuCritical, EventDomain: InfraDomain, Timestamp: time.Now()}
@@ -403,8 +403,8 @@ func TestPatternWatcher_OnMaterialized_DifferentDepths(t *testing.T) {
 
 	t.Run("works with depth 2", func(t *testing.T) {
 		syn, _, listener := newTestSynapseWithMemoryAndWatcher(t)
-		syn.PatternWatcher[0].SetDepth(2)
-		syn.PatternWatcher[0].SetMinCount(2)
+		syn.PatternWatcher[0].(*PatternWatcher).Depth = 2
+		syn.PatternWatcher[0].(*PatternWatcher).MinCount = 2
 
 		derived1 := Event{EventType: CpuCritical, EventDomain: InfraDomain, Timestamp: time.Now()}
 		derived2 := Event{EventType: CpuCritical, EventDomain: InfraDomain, Timestamp: time.Now()}
@@ -427,7 +427,7 @@ func TestPatternWatcher_OnMaterialized_DifferentDepths(t *testing.T) {
 func TestPatternWatcher_OnMaterialized_PatternMatchContent(t *testing.T) {
 	t.Run("includes correct pattern match fields", func(t *testing.T) {
 		syn, _, listener := newTestSynapseWithMemoryAndWatcher(t)
-		syn.PatternWatcher[0].SetMinCount(2)
+		syn.PatternWatcher[0].(*PatternWatcher).MinCount = 2
 
 		derived1 := Event{
 			EventType:   CpuCritical,
@@ -479,7 +479,7 @@ func TestPatternWatcher_OnMaterialized_PatternMatchContent(t *testing.T) {
 func TestPatternWatcher_OnMaterialized_DifferentEventTypes(t *testing.T) {
 	t.Run("tracks different event types separately", func(t *testing.T) {
 		syn, _, listener := newTestSynapseWithMemoryAndWatcher(t)
-		syn.PatternWatcher[0].SetMinCount(2)
+		syn.PatternWatcher[0].(*PatternWatcher).MinCount = 2
 
 		contributors := []Event{
 			{EventType: CpuStatusChanged, EventDomain: InfraDomain, Timestamp: time.Now()},
@@ -506,4 +506,92 @@ func TestPatternWatcher_OnMaterialized_DifferentEventTypes(t *testing.T) {
 		require.Equal(t, CpuCritical, matches[0].Key.DerivedType)
 		require.Equal(t, MemoryCritical, matches[1].Key.DerivedType)
 	})
+}
+
+func (l *testPatternListener) Count() int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return len(l.matches)
+}
+
+func TestPatternWatcher_WatchSpec_FiltersByDerivedType(t *testing.T) {
+	base := NewInMemoryEventNetwork()
+	mem := NewInMemoryStructuralMemory()
+
+	// listeners to assert which watcher fired
+	tremorListener := &testPatternListener{}
+	animalListener := &testPatternListener{}
+
+	// watcher A: only tremor high-frequency meaning
+	wTremor := NewPatternWatcher(mem, PatternConfig{Depth: 4, MinCount: 2, PatternListener: tremorListener})
+	wTremor.Spec = WatchSpec{
+		DerivedTypes: map[EventType]struct{}{
+			HighFrequencyOfMinorTremors: {},
+		},
+	}
+
+	// watcher B: only animal unexpected behavior meaning
+	wAnimal := NewPatternWatcher(mem, PatternConfig{Depth: 4, MinCount: 2, PatternListener: animalListener})
+	wAnimal.Spec = WatchSpec{
+		DerivedTypes: map[EventType]struct{}{
+			MultipleAnimalUnexpectedBehavior: {},
+		},
+	}
+
+	// multiplex them (so both can observe the same materialization stream)
+	patterns := MultiObserver{Observers: []PatternObserver{wTremor, wAnimal}}
+
+	// helper that simulates "materialize derived event" correctly:
+	// Add derived, add edges, Memory.OnMaterialized, then Patterns.OnMaterialized. :contentReference[oaicite:3]{index=3}
+	materialize := func(derived Event, contributors []Event, ruleID string) {
+		// store derived
+		id, err := base.AddEvent(derived)
+		require.NoError(t, err)
+		derived.ID = id
+
+		// store contributors and edges (simplified: assume contributors already have IDs)
+		for _, c := range contributors {
+			require.NotEmpty(t, c.ID)
+			require.NoError(t, base.AddEdge(c.ID, derived.ID, "contrib"))
+		}
+
+		// update memory, then observe
+		mem.OnMaterialized(derived, contributors, ruleID)
+		patterns.OnMaterialized(derived, contributors, ruleID)
+	}
+
+	// create two leaf contributors
+	c1 := Event{EventType: MinorTremors, EventDomain: Geology, Timestamp: time.Now()}
+	c2 := Event{EventType: MinorTremors, EventDomain: Geology, Timestamp: time.Now()}
+	id1, _ := base.AddEvent(c1)
+	c1.ID = id1
+	id2, _ := base.AddEvent(c2)
+	c2.ID = id2
+
+	// 1) materialize tremor meaning twice => tremor watcher should fire once (on 2nd)
+	dT := Event{EventType: HighFrequencyOfMinorTremors, EventDomain: Geology, Timestamp: time.Now()}
+	materialize(dT, []Event{c1, c2}, "rule-tremor-1")
+
+	dT2 := Event{EventType: HighFrequencyOfMinorTremors, EventDomain: Geology, Timestamp: time.Now()}
+	materialize(dT2, []Event{c1, c2}, "rule-tremor-1")
+
+	require.Equal(t, 1, tremorListener.Count())
+	require.Equal(t, 0, animalListener.Count())
+
+	// 2) materialize animal meaning twice => animal watcher should fire once (on 2nd)
+	a1 := Event{EventType: RawAnimalBehavior, EventDomain: AnimalObservation, Timestamp: time.Now()}
+	a2 := Event{EventType: RawAnimalBehavior, EventDomain: AnimalObservation, Timestamp: time.Now()}
+	aid1, _ := base.AddEvent(a1)
+	a1.ID = aid1
+	aid2, _ := base.AddEvent(a2)
+	a2.ID = aid2
+
+	dA := Event{EventType: MultipleAnimalUnexpectedBehavior, EventDomain: AnimalObservation, Timestamp: time.Now()}
+	materialize(dA, []Event{a1, a2}, "rule-animal-1")
+
+	dA2 := Event{EventType: MultipleAnimalUnexpectedBehavior, EventDomain: AnimalObservation, Timestamp: time.Now()}
+	materialize(dA2, []Event{a1, a2}, "rule-animal-1")
+
+	require.Equal(t, 1, tremorListener.Count())
+	require.Equal(t, 1, animalListener.Count())
 }

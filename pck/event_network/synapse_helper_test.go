@@ -14,6 +14,7 @@ const (
 	// events: AnimalObservation
 	ZebrasMigration     = "zebras_migration"
 	UnusualBirdBehavior = "unusual_bird_behavior"
+	RawAnimalBehavior   = "raw_animal_behavior"
 	// derive event
 	MultipleAnimalUnexpectedBehavior = "multiple_animal_unexpected_behavior"
 

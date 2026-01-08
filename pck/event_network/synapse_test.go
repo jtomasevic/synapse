@@ -102,13 +102,38 @@ func Test_WithComplexRules(t *testing.T) {
 }
 
 func Test_CrossDomainEvents(t *testing.T) {
-	
+
 	listener := NewPatternListenerPoc()
 	configs := []PatternConfig{
 		{
 			Depth:           4,
-			MinCount:        2,
+			MinCount:        3,
 			PatternListener: listener,
+			Spec: WatchSpec{
+				DerivedTypes: map[EventType]struct{}{
+					"multiple_animal_unexpected_behavior": {},
+				},
+			},
+		},
+		{
+			Depth:           4,
+			MinCount:        3,
+			PatternListener: listener,
+			Spec: WatchSpec{
+				DerivedTypes: map[EventType]struct{}{
+					"high_frequency_of_minor_tremors": {},
+				},
+			},
+		},
+		{
+			Depth:           4,
+			MinCount:        3,
+			PatternListener: listener,
+			Spec: WatchSpec{
+				DerivedTypes: map[EventType]struct{}{
+					"potential_natural_catastrophic": {},
+				},
+			},
 		},
 	}
 
