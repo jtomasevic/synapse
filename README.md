@@ -206,9 +206,21 @@ They can detect:
 * cross‑domain convergence
 * disconnected but similar subgraphs
 
-Recognition is **generative** — it changes the graph by creating new meaning.
+Recognition may be generative — either constructing candidate 
+meaning or promoting stabilized meaning into durable semantic state.
+Introduce the split:
 
+Derivation (Rules): “this meaning is possible / constructed”
+#### 4.4.1 Stabilization
+> Stabilization is the process by which repeatedly recognized semantic structures are promoted into durable, reusable semantic state.
+
+Stabilization (Patterns / Composition): “this meaning has repeated enough to be promoted into a durable semantic state”
+
+> SYNAPSE separates recognition from conviction: rules construct candidate meaning; pattern composition promotes meaning only after recurrence stabilizes.
 ---
+
+Recognition answers whether meaning is structurally valid.
+Stabilization answers whether meaning is durable.
 
 ## 5. Structural Memory Layer
 
