@@ -49,37 +49,34 @@ func Test_WithComplexRules(t *testing.T) {
 		},
 	))
 
-	synapse.RegisterRule(MemoryCritical, NewDeriveEventRule("node_critical2",
-		NewCondition().HasPeers(CpuCritical,
-			Conditions{
-				Counter: &Counter{
-					HowMany:       1,
-					HowManyOrMore: true,
+	// Register symmetric rule: when either CpuCritical or MemoryCritical exists,
+	// check for peers of the other type to derive ServerNodeChangeStatus
+	synapse.RegisterRuleForTypes(
+		[]EventType{CpuCritical, MemoryCritical},
+		NewDeriveEventRule("node_critical2",
+			NewCondition().
+				HasPeers(CpuCritical, Conditions{
+					Counter: &Counter{
+						HowMany:       1,
+						HowManyOrMore: true,
+					},
+				}).
+				Or().
+				HasPeers(MemoryCritical, Conditions{
+					Counter: &Counter{
+						HowMany:       1,
+						HowManyOrMore: true,
+					},
+				}),
+			EventTemplate{
+				EventType:   ServerNodeChangeStatus,
+				EventDomain: InfraDomain,
+				EventProps: map[string]any{
+					"occurs": 1,
 				},
-			}), EventTemplate{
-			EventType:   ServerNodeChangeStatus,
-			EventDomain: InfraDomain,
-			EventProps: map[string]any{
-				"occurs": 1,
 			},
-		},
-	))
-
-	synapse.RegisterRule(CpuCritical, NewDeriveEventRule("node_critical2",
-		NewCondition().HasPeers(MemoryCritical,
-			Conditions{
-				Counter: &Counter{
-					HowMany:       1,
-					HowManyOrMore: true,
-				},
-			}), EventTemplate{
-			EventType:   ServerNodeChangeStatus,
-			EventDomain: InfraDomain,
-			EventProps: map[string]any{
-				"occurs": 1,
-			},
-		},
-	))
+		),
+	)
 
 	_, err := synapse.Ingest(createCpuStatusChangedEvent(92, "critical"))
 	_, err = synapse.Ingest(createMemoryStatusChangedEvent(70, "critical"))
@@ -139,9 +136,9 @@ func Test_CrossDomainEvents(t *testing.T) {
 
 	synapse := NewSynapse(configs)
 
-	synapse.RegisterRule(ZebrasMigration, NewDeriveEventRule("1",
-		NewCondition().HasPeers(UnusualBirdBehavior,
-			Conditions{
+	synapse.RegisterRuleForTypes([]EventType{ZebrasMigration, UnusualBirdBehavior},
+		NewDeriveEventRule("2",
+			NewCondition().HasPeers(UnusualBirdBehavior, Conditions{
 				Counter: &Counter{
 					HowMany:       1,
 					HowManyOrMore: true,
@@ -150,12 +147,7 @@ func Test_CrossDomainEvents(t *testing.T) {
 					Within:   8,
 					TimeUnit: Hour,
 				},
-			},
-		), getAnimalObservationDerivedEventTemplate()))
-
-	synapse.RegisterRule(UnusualBirdBehavior, NewDeriveEventRule("2",
-		NewCondition().HasPeers(ZebrasMigration,
-			Conditions{
+			}).Or().HasPeers(ZebrasMigration, Conditions{
 				Counter: &Counter{
 					HowMany:       1,
 					HowManyOrMore: true,
@@ -164,8 +156,10 @@ func Test_CrossDomainEvents(t *testing.T) {
 					Within:   8,
 					TimeUnit: Hour,
 				},
-			},
-		), getAnimalObservationDerivedEventTemplate()))
+			}),
+			getAnimalObservationDerivedEventTemplate(),
+		),
+	)
 
 	synapse.RegisterRule(MinorTremors, NewDeriveEventRule("2",
 		NewCondition().HasPeers(MinorTremors,
@@ -181,31 +175,31 @@ func Test_CrossDomainEvents(t *testing.T) {
 			},
 		), getMinorTremorDerivedEventTemplate()))
 
-	synapse.RegisterRule(HighFrequencyOfMinorTremors, NewDeriveEventRule("3",
-		NewCondition().HasPeers(MultipleAnimalUnexpectedBehavior, Conditions{
-			Counter: &Counter{
-				HowMany:       1,
-				HowManyOrMore: true,
+	synapse.RegisterRuleForTypes([]EventType{HighFrequencyOfMinorTremors, MultipleAnimalUnexpectedBehavior},
+		NewDeriveEventRule(
+			"join_peers",
+			NewCondition().HasPeers(HighFrequencyOfMinorTremors, Conditions{
+				Counter: &Counter{
+					HowMany:       1,
+					HowManyOrMore: true,
+				},
+				TimeWindow: &TimeWindow{
+					Within:   8,
+					TimeUnit: Hour,
+				},
+			}).Or().HasPeers(MultipleAnimalUnexpectedBehavior, Conditions{
+				Counter: &Counter{
+					HowMany:       1,
+					HowManyOrMore: true,
+				},
+				TimeWindow: &TimeWindow{
+					Within:   8,
+					TimeUnit: Hour,
+				},
 			},
-			TimeWindow: &TimeWindow{
-				Within:   8,
-				TimeUnit: Hour,
-			},
-		},
-		), getPotentialNaturalCatastrophicDerivedEventTemplate()))
-
-	synapse.RegisterRule(MultipleAnimalUnexpectedBehavior, NewDeriveEventRule("3",
-		NewCondition().HasPeers(HighFrequencyOfMinorTremors, Conditions{
-			Counter: &Counter{
-				HowMany:       1,
-				HowManyOrMore: true,
-			},
-			TimeWindow: &TimeWindow{
-				Within:   8,
-				TimeUnit: Hour,
-			},
-		},
-		), getPotentialNaturalCatastrophicDerivedEventTemplate()))
+			), getPotentialNaturalCatastrophicDerivedEventTemplate(),
+		),
+	)
 
 	ingestEvents(t, synapse)
 	net := synapse.GetNetwork()
@@ -330,9 +324,9 @@ func Test_CrossDomainEventsWithPatterns(t *testing.T) {
 	// Set the synapse on composition watcher now that synapse is created
 	compositionWatcher.Synapse = synapse
 
-	synapse.RegisterRule(ZebrasMigration, NewDeriveEventRule("1",
-		NewCondition().HasPeers(UnusualBirdBehavior,
-			Conditions{
+	synapse.RegisterRuleForTypes([]EventType{ZebrasMigration, UnusualBirdBehavior},
+		NewDeriveEventRule("2",
+			NewCondition().HasPeers(UnusualBirdBehavior, Conditions{
 				Counter: &Counter{
 					HowMany:       1,
 					HowManyOrMore: true,
@@ -341,12 +335,7 @@ func Test_CrossDomainEventsWithPatterns(t *testing.T) {
 					Within:   8,
 					TimeUnit: Hour,
 				},
-			},
-		), getAnimalObservationDerivedEventTemplate()))
-
-	synapse.RegisterRule(UnusualBirdBehavior, NewDeriveEventRule("2",
-		NewCondition().HasPeers(ZebrasMigration,
-			Conditions{
+			}).Or().HasPeers(ZebrasMigration, Conditions{
 				Counter: &Counter{
 					HowMany:       1,
 					HowManyOrMore: true,
@@ -355,8 +344,10 @@ func Test_CrossDomainEventsWithPatterns(t *testing.T) {
 					Within:   8,
 					TimeUnit: Hour,
 				},
-			},
-		), getAnimalObservationDerivedEventTemplate()))
+			}),
+			getAnimalObservationDerivedEventTemplate(),
+		),
+	)
 
 	synapse.RegisterRule(MinorTremors, NewDeriveEventRule("2",
 		NewCondition().HasPeers(MinorTremors,
@@ -379,12 +370,21 @@ func Test_CrossDomainEventsWithPatterns(t *testing.T) {
 	net := synapse.GetNetwork()
 	multipleAnimalUnexpectedBehaviors, _ := net.GetByType(MultipleAnimalUnexpectedBehavior)
 	highFrequencyOfMinorTremors, _ := net.GetByType(HighFrequencyOfMinorTremors)
+	potentialNaturalCatastrophic, _ := net.GetByType(PotentialNaturalCatastrophic)
 
-	require.GreaterOrEqual(t, len(multipleAnimalUnexpectedBehaviors), 1, "should have at least one MultipleAnimalUnexpectedBehavior")
-	require.GreaterOrEqual(t, len(highFrequencyOfMinorTremors), 1, "should have at least one HighFrequencyOfMinorTremors")
+	require.Equal(t, len(multipleAnimalUnexpectedBehaviors), 1)
+	require.Equal(t, len(highFrequencyOfMinorTremors), 1)
+	require.Equal(t, len(potentialNaturalCatastrophic), 0)
 
 	// Second ingestion - should trigger pattern recognition and composition
 	ingestEvents(t, synapse)
+	multipleAnimalUnexpectedBehaviors, _ = net.GetByType(MultipleAnimalUnexpectedBehavior)
+	highFrequencyOfMinorTremors, _ = net.GetByType(HighFrequencyOfMinorTremors)
+	potentialNaturalCatastrophic, _ = net.GetByType(PotentialNaturalCatastrophic)
+
+	require.Equal(t, len(multipleAnimalUnexpectedBehaviors), 2)
+	require.Equal(t, len(highFrequencyOfMinorTremors), 2)
+	require.Equal(t, len(potentialNaturalCatastrophic), 0)
 
 	// After multiple ingestions, patterns should be recognized and composition should be triggered
 	ingestEvents(t, synapse)
@@ -394,9 +394,13 @@ func Test_CrossDomainEventsWithPatterns(t *testing.T) {
 	require.GreaterOrEqual(t, len(compositionMatches), 1, "should have at least one composition match")
 
 	// Verify the derived event was created
-	potentialNaturalCatastrophes, _ := net.GetByType(PotentialNaturalCatastrophic)
-	require.GreaterOrEqual(t, len(potentialNaturalCatastrophes), 1, "should have at least one PotentialNaturalCatastrophic event from pattern composition")
+	multipleAnimalUnexpectedBehaviors, _ = net.GetByType(MultipleAnimalUnexpectedBehavior)
+	highFrequencyOfMinorTremors, _ = net.GetByType(HighFrequencyOfMinorTremors)
+	potentialNaturalCatastrophic, _ = net.GetByType(PotentialNaturalCatastrophic)
 
+	require.Equal(t, len(multipleAnimalUnexpectedBehaviors), 3)
+	require.Equal(t, len(highFrequencyOfMinorTremors), 3)
+	require.Equal(t, len(potentialNaturalCatastrophic), 1)
 	// Verify composition match details
 	composition := compositionMatches[0]
 	require.Equal(t, PotentialNaturalCatastrophic, composition.DerivedEvent.EventType)
@@ -412,7 +416,7 @@ func Test_CrossDomainEventsWithPatterns(t *testing.T) {
 	require.True(t, patternTypes[MultipleAnimalUnexpectedBehavior], "composition should include MultipleAnimalUnexpectedBehavior pattern")
 	require.True(t, patternTypes[HighFrequencyOfMinorTremors], "composition should include HighFrequencyOfMinorTremors pattern")
 
-	potentialNaturalCatastrophic, _ := net.GetByType(PotentialNaturalCatastrophic)
+	potentialNaturalCatastrophic, _ = net.GetByType(PotentialNaturalCatastrophic)
 	require.Equal(t, 1, len(potentialNaturalCatastrophic))
 
 	PrintEventGraph(synapse.GetNetwork())

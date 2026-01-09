@@ -3,6 +3,7 @@ package event_network
 type Synapse interface {
 	Ingest(event Event) (EventID, error)
 	RegisterRule(eventType EventType, rule Rule)
+	RegisterRuleForTypes(eventTypes []EventType, rule Rule)
 	GetNetwork() EventNetwork
 }
 

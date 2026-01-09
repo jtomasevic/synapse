@@ -21,6 +21,14 @@ func (s *SynapseRuntime) RegisterRule(eventType EventType, rule Rule) {
 	s.rulesByType[eventType] = append(s.rulesByType[eventType], rule)
 }
 
+func (s *SynapseRuntime) RegisterRuleForTypes(eventTypes []EventType, rule Rule) {
+	// IMPORTANT: bind rules to EvalNet so Expression evaluation benefits from caching
+	rule.BindNetwork(s.Network)
+	for _, eventType := range eventTypes {
+		s.rulesByType[eventType] = append(s.rulesByType[eventType], rule)
+	}
+}
+
 func (s *SynapseRuntime) Ingest(event Event) (EventID, error) {
 	// 1) Add event
 	id, err := s.Network.AddEvent(event)
