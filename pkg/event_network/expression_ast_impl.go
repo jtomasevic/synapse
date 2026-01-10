@@ -541,7 +541,8 @@ func (e *EventExpression) applyConditions(
 
 		if cond.TimeWindow != nil {
 			d := cond.TimeWindow.TimeUnit.ToDuration(cond.TimeWindow.Within)
-			//TODO: if ev.Timestamp.Before(anchorTS.Add(-d)) || ev.Timestamp.After(anchorTS) {
+			// Time window: events must be within [anchorTS - d, anchorTS + d]
+			// This allows events both before and after the anchor within the window
 			if ev.Timestamp.Before(anchorTS.Add(-d)) || ev.Timestamp.After(anchorTS.Add(d)) {
 				continue
 			}
