@@ -592,6 +592,136 @@ func TestPatternWatcher_WatchSpec_FiltersByDerivedType(t *testing.T) {
 	dA2 := Event{EventType: MultipleAnimalUnexpectedBehavior, EventDomain: AnimalObservation, Timestamp: time.Now()}
 	materialize(dA2, []Event{a1, a2}, "rule-animal-1")
 
-	require.Equal(t, 1, tremorListener.Count())
-	require.Equal(t, 1, animalListener.Count())
+		require.Equal(t, 1, tremorListener.Count())
+		require.Equal(t, 1, animalListener.Count())
+}
+
+func TestPatternWatcher_SetDepth(t *testing.T) {
+	mem := NewInMemoryStructuralMemory()
+	watcher := NewPatternWatcher(mem, PatternConfig{
+		Depth:           4,
+		MinCount:        2,
+		PatternListener: &testPatternListener{},
+	})
+
+	require.Equal(t, 4, watcher.Depth)
+
+	watcher.SetDepth(2)
+	require.Equal(t, 2, watcher.Depth)
+
+	watcher.SetDepth(0)
+	require.Equal(t, 0, watcher.Depth)
+}
+
+func TestPatternWatcher_SetMinCount(t *testing.T) {
+	mem := NewInMemoryStructuralMemory()
+	watcher := NewPatternWatcher(mem, PatternConfig{
+		Depth:           4,
+		MinCount:        2,
+		PatternListener: &testPatternListener{},
+	})
+
+	require.Equal(t, 2, watcher.MinCount)
+
+	watcher.SetMinCount(5)
+	require.Equal(t, 5, watcher.MinCount)
+
+	watcher.SetMinCount(1)
+	require.Equal(t, 1, watcher.MinCount)
+}
+
+func TestPatternWatcher_SetListener(t *testing.T) {
+	mem := NewInMemoryStructuralMemory()
+	listener1 := &testPatternListener{}
+	watcher := NewPatternWatcher(mem, PatternConfig{
+		Depth:           4,
+		MinCount:        1,
+		PatternListener: listener1,
+	})
+
+	require.Equal(t, listener1, watcher.Listener)
+
+	listener2 := &testPatternListener{}
+	watcher.SetListener(listener2)
+	require.Equal(t, listener2, watcher.Listener)
+}
+
+func TestWatchSpec_Allows(t *testing.T) {
+	t.Run("allows all when spec is empty", func(t *testing.T) {
+		spec := WatchSpec{}
+		event := Event{
+			EventType:   CpuCritical,
+			EventDomain: InfraDomain,
+		}
+		require.True(t, spec.Allows(event))
+	})
+
+	t.Run("filters by derived type", func(t *testing.T) {
+		spec := WatchSpec{
+			DerivedTypes: map[EventType]struct{}{
+				CpuCritical: {},
+			},
+		}
+
+		allowedEvent := Event{
+			EventType:   CpuCritical,
+			EventDomain: InfraDomain,
+		}
+		require.True(t, spec.Allows(allowedEvent))
+
+		disallowedEvent := Event{
+			EventType:   MemoryCritical,
+			EventDomain: InfraDomain,
+		}
+		require.False(t, spec.Allows(disallowedEvent))
+	})
+
+	t.Run("filters by domain", func(t *testing.T) {
+		spec := WatchSpec{
+			Domains: map[EventDomain]struct{}{
+				InfraDomain: {},
+			},
+		}
+
+		allowedEvent := Event{
+			EventType:   CpuCritical,
+			EventDomain: InfraDomain,
+		}
+		require.True(t, spec.Allows(allowedEvent))
+
+		disallowedEvent := Event{
+			EventType:   CpuCritical,
+			EventDomain: AnimalObservation,
+		}
+		require.False(t, spec.Allows(disallowedEvent))
+	})
+
+	t.Run("filters by both type and domain", func(t *testing.T) {
+		spec := WatchSpec{
+			DerivedTypes: map[EventType]struct{}{
+				CpuCritical: {},
+			},
+			Domains: map[EventDomain]struct{}{
+				InfraDomain: {},
+			},
+		}
+
+		allowedEvent := Event{
+			EventType:   CpuCritical,
+			EventDomain: InfraDomain,
+		}
+		require.True(t, spec.Allows(allowedEvent))
+
+		wrongTypeEvent := Event{
+			EventType:   MemoryCritical,
+			EventDomain: InfraDomain,
+		}
+		require.False(t, spec.Allows(wrongTypeEvent))
+
+		wrongDomainEvent := Event{
+			EventType:   CpuCritical,
+			EventDomain: AnimalObservation,
+		}
+		require.False(t, spec.Allows(wrongDomainEvent))
+	})
 }
