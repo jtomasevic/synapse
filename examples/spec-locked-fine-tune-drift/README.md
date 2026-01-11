@@ -28,7 +28,6 @@ flowchart TD
 
   subgraph L0["Level 0 - Raw events (leaves)"]
     RS["run_started (training)"]
-    DSA["dataset_slice_added (data)"]
     DPF["dataset_provenance_flag (data)"]
     ER["eval_regression_observed (eval)"]
     SCV["spec_constraint_violation (spec)"]
