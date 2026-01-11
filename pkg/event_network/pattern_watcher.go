@@ -98,10 +98,13 @@ func (w *PatternWatcher) OnMaterialized(derived Event, contributors []Event, rul
 	}
 
 	if !w.Spec.Allows(derived) {
+		// Debug: log when spec doesn't allow
+		// fmt.Printf("PatternWatcher: spec doesn't allow %s (depth=%d, watching=%v)\n", derived.EventType, w.Depth, w.Spec.DerivedTypes)
 		return
 	}
 
-	// Safety: if memory doesn’t support requested depth, do nothing.
+	// Safety: if memory doesn't support requested depth, do nothing.
+	// Note: depth can be equal to maxDepth (depth 5 with maxDepth 5 is valid)
 	if w.Depth < 0 || w.Depth > w.Mem.MaxSignatureDepth() {
 		return
 	}
@@ -122,16 +125,15 @@ func (w *PatternWatcher) OnMaterialized(derived Event, contributors []Event, rul
 	}
 
 	stats, ok := w.Mem.GetLineageStats(key)
-	//stats.Count++
 	if !ok {
-		// If memory always creates stats when it computes sigs, this shouldn't happen,
-		// but we keep it safe.
 		return
 	}
 
-	// “Repeated” policy:
+	// "Repeated" policy:
 	// - first time Count=1 => NOT repeated => no fire
 	// - Count>=2 => repeated => fire on every occurrence
+	// Note: stats.Count is incremented in bumpLineageStatsLocked BEFORE this check
+	// So when we check here, Count already includes the current occurrence
 	if stats.Count < w.MinCount {
 		return
 	}

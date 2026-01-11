@@ -110,7 +110,7 @@ func NewInMemoryStructuralMemory() *InMemoryStructuralMemory {
 		typeRev: make(map[EventType]uint64),
 		motifs:  make(map[MotifKey]*MotifStats),
 
-		maxDepth:             4,
+		maxDepth:             5,
 		sigs:                 make(map[EventID][]uint64),
 		lineageStats:         make(map[LineageKey]*LineageStats),
 		maxSamplesPerLineage: 20,
