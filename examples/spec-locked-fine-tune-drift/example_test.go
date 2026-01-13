@@ -43,7 +43,7 @@ func Test_TinkerStyle_SpecLockedFineTune_DriftToReleaseGate(t *testing.T) {
 	)
 
 	// --- Pattern wiring: derive ReleaseGateTriggered only after repeated motifs ---
-	patternListener := &TestCompositionListener{} // you already have this in codev3.go tests
+	patternListener := &TestCompositionListener{}
 	composite := NewCompositePatternListener(patternListener)
 
 	required := map[PatternIdentifier]struct{}{
