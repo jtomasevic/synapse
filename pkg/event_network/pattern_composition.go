@@ -37,7 +37,7 @@ type PatternCompositionMatch struct {
 	Spec         PatternCompositionSpec
 	RecognizedAt time.Time
 	Patterns     []PatternMatch // The individual patterns that composed
-	DerivedEvent Event           // The derived event created (if any)
+	DerivedEvent Event          // The derived event created (if any)
 }
 
 // PatternCompositionListener receives notifications when compositions are recognized
@@ -267,7 +267,7 @@ func (w *PatternCompositionWatcher) createCompositionMatch(recognizedAt time.Tim
 
 	w.Listener.OnCompositionRecognized(compositionMatch)
 
-	// Reset counts after composition is recognized (optional - you might want to keep them)
+	// Reset counts after composition is recognized (optional - we might want to keep them)
 	// w.resetCounts()
 }
 
@@ -323,4 +323,3 @@ func (l *CompositePatternListener) OnPatternRepeated(match PatternMatch) {
 		watcher.OnPatternRepeated(match)
 	}
 }
-

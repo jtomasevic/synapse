@@ -140,7 +140,7 @@ func (s *SynapseRuntime) materializeFromTemplate(
 
 	if s.Memory != nil {
 		s.Memory.OnMaterialized(derived, contributors, originID)
-		for _, w := range s.PatternWatcher { // your newer version already supports multi :contentReference[oaicite:4]{index=4}
+		for _, w := range s.PatternWatcher {
 			w.OnMaterialized(derived, contributors, originID)
 		}
 	}

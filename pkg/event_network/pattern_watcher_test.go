@@ -61,16 +61,14 @@ func newTestSynapseWithMemoryAndWatcher(t *testing.T) (*SynapseRuntime, *InMemor
 	return syn, mem, listener
 }
 
-// Example: the *first* test you'd write.
-// This assumes you have:
 // - SynapseRuntime.materializeDerived calling Memory.OnMaterialized + Patterns.OnMaterialized
 // - Hashing/signature code already in memory
 func TestPatternWatcher_FiresOnSecondOccurrence_Depth4(t *testing.T) {
 	syn, _, listener := newTestSynapseWithMemoryAndWatcher(t)
 
 	// 1) Ingest some leaf events
-	// Use fixed timestamps if your conditions/time windows depend on them.
-	// If not, leaving Timestamp empty is fine if your AddEvent sets it or you don’t filter by time.
+	// Use fixed timestamps if our conditions/time windows depend on them.
+	// If not, leaving Timestamp empty is fine if our AddEvent sets it or you don’t filter by time.
 	cpu1 := Event{EventType: CpuStatusChanged, EventDomain: InfraDomain, Timestamp: time.Now()}
 	cpu2 := Event{EventType: CpuStatusChanged, EventDomain: InfraDomain, Timestamp: time.Now()}
 
@@ -80,7 +78,7 @@ func TestPatternWatcher_FiresOnSecondOccurrence_Depth4(t *testing.T) {
 	require.NoError(t, err)
 
 	// 2) Manually materialize the same derived “shape” twice to create a repeat.
-	// If you prefer full pipeline, register rules and rely on rule firing.
+	// If we prefer full pipeline, register rules and rely on rule firing.
 	// For a focused memory/pattern unit test, direct materialization is simpler.
 	//
 	// IMPORTANT: materializeDerived must:
@@ -90,7 +88,7 @@ func TestPatternWatcher_FiresOnSecondOccurrence_Depth4(t *testing.T) {
 	// - Patterns.OnMaterialized(...)
 	//
 	// For this example we grab events back from network to get IDs.
-	// (adjust to your network API)
+	// (adjust to network API)
 	base := syn.Network
 
 	// fetch actual stored leaf events (IDs assigned on ingest)
@@ -592,8 +590,8 @@ func TestPatternWatcher_WatchSpec_FiltersByDerivedType(t *testing.T) {
 	dA2 := Event{EventType: MultipleAnimalUnexpectedBehavior, EventDomain: AnimalObservation, Timestamp: time.Now()}
 	materialize(dA2, []Event{a1, a2}, "rule-animal-1")
 
-		require.Equal(t, 1, tremorListener.Count())
-		require.Equal(t, 1, animalListener.Count())
+	require.Equal(t, 1, tremorListener.Count())
+	require.Equal(t, 1, animalListener.Count())
 }
 
 func TestPatternWatcher_SetDepth(t *testing.T) {
