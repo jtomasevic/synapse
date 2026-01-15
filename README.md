@@ -289,7 +289,7 @@ Motifs allow SYNAPSE to:
 
 SYNAPSE excels where:
 
-* no single is decisive
+* no single signal is decisive
 * signals are noisy or probabilistic
 * meaning emerges over time
 * explainability and governance are mandatory
