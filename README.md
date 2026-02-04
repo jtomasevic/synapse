@@ -42,7 +42,7 @@ SYNAPSE therefore answers a different question than traditional systems:
 * not *“what happened?”*
 * not *“what should we do?”*
 
-Or:
+But:
 
 > **“What does this set of events mean together, over time?”**
 
