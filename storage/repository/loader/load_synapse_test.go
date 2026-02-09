@@ -19,7 +19,7 @@ import (
 // Database helpers
 // =========================================================================
 
-const defaultDSN = "postgres://synapse:synapse@localhost:5434/synapse?sslmode=disable"
+const defaultDSN = "postgres://synapse:synapse@localhost:5432/synapse?sslmode=disable"
 
 // getTestPool connects to the real PostgreSQL database.
 // If the database is not reachable the test is skipped so that a plain

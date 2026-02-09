@@ -18,19 +18,21 @@
 #   make sqlc-diff     - Show pending sqlc changes (dry run)
 #
 # Integration tests:
-#   make test-loader   - Run loader integration tests (auto-starts Docker)
+#   make test-loader      - Run loader integration tests (auto-starts Docker)
+#   make test-pg-network  - Run PG network integration tests (auto-starts Docker)
+#   make test-integration - Run ALL integration tests
 # ============================================================
 
 IMAGE_NAME   := synapse-db
 CONTAINER    := synapse-db
 DOCKER_DIR   := docker
-HOST_PORT    := 5434
+HOST_PORT    := 5432
 VOLUME_NAME  := synapse-pgdata
 
 SQLC_DIR     := repository
 SQLC_VERSION := latest
 
-.PHONY: build run stop status logs psql clean purge sqlc-install sqlc-generate sqlc-vet sqlc-diff test-loader
+.PHONY: build run stop status logs psql clean purge sqlc-install sqlc-generate sqlc-vet sqlc-diff test-loader test-pg-network test-integration
 
 # ----------------------------------------------------------
 # build: Build the Docker image
@@ -165,6 +167,39 @@ test-loader: run
 	cd .. && SYNAPSE_TEST_DSN="$(DB_DSN)" go test -v -count=1 ./storage/repository/loader/...
 	@echo ""
 	@echo "Loader integration tests passed."
+
+# ----------------------------------------------------------
+# test-pg-network: Run EventNetworkOnPG integration tests
+#   - Same Docker lifecycle as test-loader
+#   - Exercises PG-backed network, graph traversals, hydration,
+#     MemoizedNetwork, CachedRelationProvider, StructuralMemory
+# ----------------------------------------------------------
+test-pg-network: run
+	@echo "Waiting for PostgreSQL to be ready..."
+	@ready=0; \
+	for i in $$(seq 1 $(DB_READY_TIMEOUT)); do \
+		if docker exec $(CONTAINER) pg_isready -U synapse -d synapse >/dev/null 2>&1; then \
+			ready=1; \
+			break; \
+		fi; \
+		echo "  Waiting... ($$i/$(DB_READY_TIMEOUT))"; \
+		sleep 1; \
+	done; \
+	if [ "$$ready" -ne 1 ]; then \
+		echo "ERROR: PostgreSQL not ready after $(DB_READY_TIMEOUT)s"; \
+		exit 1; \
+	fi
+	@echo "PostgreSQL is ready. Running PG network integration tests..."
+	cd .. && SYNAPSE_TEST_DSN="$(DB_DSN)" go test -v -count=1 ./pkg/event_network/integration_tests/...
+	@echo ""
+	@echo "PG network integration tests passed."
+
+# ----------------------------------------------------------
+# test-integration: Run ALL integration tests
+# ----------------------------------------------------------
+test-integration: test-loader test-pg-network
+	@echo ""
+	@echo "All integration tests passed."git 
 
 # ============================================================
 # sqlc - Code generation from SQL queries
