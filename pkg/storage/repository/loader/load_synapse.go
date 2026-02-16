@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/jtomasevic/synapse/storage/repository"
+	"github.com/jtomasevic/synapse/pkg/storage/repository"
 )
 
 // ---------------------------------------------------------------------------

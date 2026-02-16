@@ -20,6 +20,7 @@
 # Integration tests:
 #   make test-loader      - Run loader integration tests (auto-starts Docker)
 #   make test-pg-network  - Run PG network integration tests (auto-starts Docker)
+#   make test-service     - Run service integration tests (auto-starts Docker)
 #   make test-integration - Run ALL integration tests
 # ============================================================
 
@@ -32,7 +33,7 @@ VOLUME_NAME  := synapse-pgdata
 SQLC_DIR     := repository
 SQLC_VERSION := latest
 
-.PHONY: build run stop status logs psql clean purge sqlc-install sqlc-generate sqlc-vet sqlc-diff test-loader test-pg-network test-integration
+.PHONY: build run stop status logs psql clean purge sqlc-install sqlc-generate sqlc-vet sqlc-diff test-loader test-loader-coverage test-pg-network test-pg-network-coverage test-service test-integration
 
 # ----------------------------------------------------------
 # build: Build the Docker image
@@ -141,6 +142,10 @@ purge: clean
 DB_DSN := postgres://synapse:synapse@localhost:$(HOST_PORT)/synapse?sslmode=disable
 DB_READY_TIMEOUT := 15
 
+COVERAGE_DIR  := coverage
+COVERAGE_OUT  := $(COVERAGE_DIR)/coverage.out
+COVERAGE_HTML := $(COVERAGE_DIR)/coverage.html
+
 # ----------------------------------------------------------
 # test-loader: Run loader integration tests against real DB
 #   - Builds the Docker image if it doesn't exist
@@ -164,9 +169,40 @@ test-loader: run
 		exit 1; \
 	fi
 	@echo "PostgreSQL is ready. Running loader integration tests..."
-	cd .. && SYNAPSE_TEST_DSN="$(DB_DSN)" go test -v -count=1 ./storage/repository/loader/...
+	cd ../.. && SYNAPSE_TEST_DSN="$(DB_DSN)" go test -v -count=1 ./pkg/storage/repository/loader/...
 	@echo ""
 	@echo "Loader integration tests passed."
+
+# ----------------------------------------------------------
+# test-loader-coverage: Same as test-loader but with coverage
+# ----------------------------------------------------------
+test-loader-coverage: run
+	@echo "Waiting for PostgreSQL to be ready..."
+	@ready=0; \
+	for i in $$(seq 1 $(DB_READY_TIMEOUT)); do \
+		if docker exec $(CONTAINER) pg_isready -U synapse -d synapse >/dev/null 2>&1; then \
+			ready=1; \
+			break; \
+		fi; \
+		echo "  Waiting... ($$i/$(DB_READY_TIMEOUT))"; \
+		sleep 1; \
+	done; \
+	if [ "$$ready" -ne 1 ]; then \
+		echo "ERROR: PostgreSQL not ready after $(DB_READY_TIMEOUT)s"; \
+		exit 1; \
+	fi
+	@mkdir -p $(COVERAGE_DIR)
+	@echo "PostgreSQL is ready. Running loader integration tests with coverage..."
+	cd ../.. && SYNAPSE_TEST_DSN="$(DB_DSN)" go test -v -count=1 \
+		-coverprofile=pkg/storage/$(COVERAGE_OUT) \
+		-coverpkg=./pkg/storage/... \
+		./pkg/storage/repository/loader/...
+	@echo ""
+	cd ../.. && go tool cover -func=pkg/storage/$(COVERAGE_OUT)
+	@echo ""
+	cd ../.. && go tool cover -html=pkg/storage/$(COVERAGE_OUT) -o pkg/storage/$(COVERAGE_HTML)
+	@echo "Coverage report: pkg/storage/$(COVERAGE_HTML)"
+	@echo "Open with: open pkg/storage/$(COVERAGE_HTML)"
 
 # ----------------------------------------------------------
 # test-pg-network: Run EventNetworkOnPG integration tests
@@ -190,16 +226,53 @@ test-pg-network: run
 		exit 1; \
 	fi
 	@echo "PostgreSQL is ready. Running PG network integration tests..."
-	cd .. && SYNAPSE_TEST_DSN="$(DB_DSN)" go test -v -count=1 ./pkg/event_network/integration_tests/...
+	cd ../.. && SYNAPSE_TEST_DSN="$(DB_DSN)" go test -v -count=1 ./pkg/event_network/integration_tests/...
 	@echo ""
 	@echo "PG network integration tests passed."
 
 # ----------------------------------------------------------
+# test-pg-network-coverage: Same as test-pg-network but with coverage
+# ----------------------------------------------------------
+test-pg-network-coverage: run
+	@echo "Waiting for PostgreSQL to be ready..."
+	@ready=0; \
+	for i in $$(seq 1 $(DB_READY_TIMEOUT)); do \
+		if docker exec $(CONTAINER) pg_isready -U synapse -d synapse >/dev/null 2>&1; then \
+			ready=1; \
+			break; \
+		fi; \
+		echo "  Waiting... ($$i/$(DB_READY_TIMEOUT))"; \
+		sleep 1; \
+	done; \
+	if [ "$$ready" -ne 1 ]; then \
+		echo "ERROR: PostgreSQL not ready after $(DB_READY_TIMEOUT)s"; \
+		exit 1; \
+	fi
+	@mkdir -p coverage/en
+	@echo "PostgreSQL is ready. Running PG network integration tests with coverage..."
+	cd ../.. && SYNAPSE_TEST_DSN="$(DB_DSN)" go test -v -count=1 \
+		-coverprofile=pkg/storage/coverage/en/coverage.out \
+		-coverpkg=./pkg/event_network/... \
+		./pkg/event_network/integration_tests/...
+	@echo ""
+	cd ../.. && go tool cover -func=pkg/storage/coverage/en/coverage.out
+	@echo ""
+	cd ../.. && go tool cover -html=pkg/storage/coverage/en/coverage.out -o pkg/storage/coverage/en/coverage.html
+	@echo "Coverage report: pkg/storage/coverage/en/coverage.html"
+	@echo "Open with: open pkg/storage/coverage/en/coverage.html"
+
+# ----------------------------------------------------------
+# test-service: Run service integration tests (delegates to service/Makefile)
+# ----------------------------------------------------------
+test-service: run
+	$(MAKE) -C ../service test-service
+
+# ----------------------------------------------------------
 # test-integration: Run ALL integration tests
 # ----------------------------------------------------------
-test-integration: test-loader test-pg-network
+test-integration: test-loader test-pg-network test-service
 	@echo ""
-	@echo "All integration tests passed."git 
+	@echo "All integration tests passed."
 
 # ============================================================
 # sqlc - Code generation from SQL queries

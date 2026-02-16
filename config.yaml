@@ -1,0 +1,25 @@
+# =============================================================================
+# Synapse API — Configuration
+# =============================================================================
+#
+# Values here can be overridden by environment variables:
+#
+#   SYNAPSE_ADDR        → server.addr
+#   SYNAPSE_DB_HOST     → database.host
+#   SYNAPSE_DB_PORT     → database.port
+#   SYNAPSE_DB_USER     → database.user
+#   SYNAPSE_DB_PASSWORD → database.password
+#   SYNAPSE_DB_NAME     → database.dbname
+#   SYNAPSE_DB_SSLMODE  → database.sslmode
+# =============================================================================
+
+server:
+  addr: ":8080"
+
+database:
+  host: "localhost"
+  port: 5432
+  user: "synapse"
+  password: "synapse"
+  dbname: "synapse"
+  sslmode: "disable"

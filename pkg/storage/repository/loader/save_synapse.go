@@ -6,7 +6,7 @@ import (
 	"fmt"
 
 	en "github.com/jtomasevic/synapse/pkg/event_network"
-	"github.com/jtomasevic/synapse/storage/repository"
+	"github.com/jtomasevic/synapse/pkg/storage/repository"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 

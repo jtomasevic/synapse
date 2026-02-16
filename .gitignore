@@ -14,6 +14,7 @@
 # Code coverage profiles and other test artifacts
 *.out
 coverage.*
+coverage/
 *.coverprofile
 profile.cov
 
@@ -23,6 +24,11 @@ profile.cov
 # Go workspace file
 go.work
 go.work.sum
+
+# Synapse API server artifacts
+synapse-api
+.synapse-api.pid
+.synapse-api.log
 
 # env file
 .env

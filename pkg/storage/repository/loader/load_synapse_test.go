@@ -10,8 +10,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	en "github.com/jtomasevic/synapse/pkg/event_network"
-	"github.com/jtomasevic/synapse/storage/repository"
-	"github.com/jtomasevic/synapse/storage/repository/loader"
+	"github.com/jtomasevic/synapse/pkg/storage/repository"
+	"github.com/jtomasevic/synapse/pkg/storage/repository/loader"
 	"github.com/stretchr/testify/require"
 )
 
