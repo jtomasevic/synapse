@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jtomasevic/synapse/storage/repository"
+	"github.com/jtomasevic/synapse/pkg/storage/repository"
 )
 
 // EventNetworkOnPG implements EventNetwork with PostgreSQL persistence.

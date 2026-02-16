@@ -1,0 +1,526 @@
+openapi: "3.0.3"
+info:
+  title: Synapse REST API
+  description: |
+    REST interface for the Synapse service – manages synapses, rules,
+    pattern watchers, and composition specs.
+  version: "1.1.0"
+  contact:
+    name: Synapse
+    url: https://github.com/jtomasevic/synapse
+
+servers:
+  - url: http://localhost:8080
+    description: Local development
+
+# =========================================================================
+# Paths
+# =========================================================================
+paths:
+
+  # --- Synapses (create) -------------------------------------------------
+  /synapses:
+    post:
+      operationId: registerSynapse
+      summary: Register a new Synapse instance
+      tags: [Synapses]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterSynapseRequest"
+      responses:
+        "201":
+          description: Synapse created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IDResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+
+  # --- Synapses (get) ----------------------------------------------------
+  /synapses/{synapseID}:
+    get:
+      operationId: getSynapse
+      summary: Get a synapse by ID
+      tags: [Synapses]
+      parameters:
+        - $ref: "#/components/parameters/synapseID"
+      responses:
+        "200":
+          description: Synapse found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GetSynapseResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # --- Rules (create + list) ---------------------------------------------
+  /synapses/{synapseID}/rules:
+    post:
+      operationId: addRule
+      summary: Add a rule to a synapse
+      tags: [Rules]
+      parameters:
+        - $ref: "#/components/parameters/synapseID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddRuleRequest"
+      responses:
+        "201":
+          description: Rule created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IDResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+    get:
+      operationId: getSynapseRules
+      summary: List all rules for a synapse
+      tags: [Rules]
+      parameters:
+        - $ref: "#/components/parameters/synapseID"
+      responses:
+        "200":
+          description: Rules list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/GetRuleResponse"
+
+  # --- Rules (get) ------------------------------------------------------
+  /rules/{ruleID}:
+    get:
+      operationId: getRule
+      summary: Get a rule by ID
+      tags: [Rules]
+      parameters:
+        - $ref: "#/components/parameters/ruleID"
+      responses:
+        "200":
+          description: Rule found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GetRuleResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # --- Patterns (create + list) ------------------------------------------
+  /synapses/{synapseID}/patterns:
+    post:
+      operationId: registerPattern
+      summary: Register a pattern watcher config
+      tags: [Patterns]
+      parameters:
+        - $ref: "#/components/parameters/synapseID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterPatternRequest"
+      responses:
+        "201":
+          description: Pattern created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IDResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+    get:
+      operationId: getSynapsePatterns
+      summary: List all pattern watcher configs for a synapse
+      tags: [Patterns]
+      parameters:
+        - $ref: "#/components/parameters/synapseID"
+      responses:
+        "200":
+          description: Patterns list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/GetPatternResponse"
+
+  # --- Patterns (get) ---------------------------------------------------
+  /patterns/{patternID}:
+    get:
+      operationId: getPattern
+      summary: Get a pattern watcher config by ID
+      tags: [Patterns]
+      parameters:
+        - $ref: "#/components/parameters/patternID"
+      responses:
+        "200":
+          description: Pattern found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GetPatternResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # --- Compositions (create + list) --------------------------------------
+  /synapses/{synapseID}/compositions:
+    post:
+      operationId: registerCompositionPattern
+      summary: Register a composition spec
+      tags: [Compositions]
+      parameters:
+        - $ref: "#/components/parameters/synapseID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterCompositionRequest"
+      responses:
+        "201":
+          description: Composition created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IDResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+    get:
+      operationId: getSynapseCompositions
+      summary: List all composition specs for a synapse
+      tags: [Compositions]
+      parameters:
+        - $ref: "#/components/parameters/synapseID"
+      responses:
+        "200":
+          description: Compositions list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/GetCompositionResponse"
+
+  # --- Compositions (get) -----------------------------------------------
+  /compositions/{compositionID}:
+    get:
+      operationId: getCompositionPattern
+      summary: Get a composition spec by ID
+      tags: [Compositions]
+      parameters:
+        - $ref: "#/components/parameters/compositionID"
+      responses:
+        "200":
+          description: Composition found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GetCompositionResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+# =========================================================================
+# Components
+# =========================================================================
+components:
+
+  # --- Parameters -------------------------------------------------------
+  parameters:
+    synapseID:
+      name: synapseID
+      in: path
+      required: true
+      description: UUID of the synapse instance
+      schema:
+        type: string
+        format: uuid
+    ruleID:
+      name: ruleID
+      in: path
+      required: true
+      description: UUID of the rule
+      schema:
+        type: string
+        format: uuid
+    patternID:
+      name: patternID
+      in: path
+      required: true
+      description: UUID of the pattern watcher config
+      schema:
+        type: string
+        format: uuid
+    compositionID:
+      name: compositionID
+      in: path
+      required: true
+      description: UUID of the composition spec
+      schema:
+        type: string
+        format: uuid
+
+  # --- Reusable Responses -----------------------------------------------
+  responses:
+    BadRequest:
+      description: Invalid input
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    UnprocessableEntity:
+      description: Business-logic or DB constraint error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+  # --- Schemas ----------------------------------------------------------
+  schemas:
+    IDResponse:
+      type: object
+      required: [id]
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+          example: "creating rule"
+        detail:
+          type: string
+          example: "duplicate key constraint"
+
+    RegisterSynapseRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          example: "my-synapse"
+
+    GetSynapseResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        description:
+          type: string
+        max_depth:
+          type: integer
+        max_samples_per_lineage:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-02-10T14:30:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2026-02-10T14:30:00Z"
+
+    AddRuleRequest:
+      type: object
+      required: [action_type, template_type, template_domain]
+      properties:
+        action_type:
+          type: string
+          example: "derive"
+        condition_json:
+          type: object
+          additionalProperties: true
+          example: {"op": "AND", "fields": ["cpu", "mem"]}
+        template_type:
+          type: string
+          example: "cpu_critical"
+        template_domain:
+          type: string
+          example: "infra"
+        template_props:
+          type: object
+          additionalProperties: true
+          example: {"severity": "high"}
+        event_types:
+          type: array
+          items:
+            type: string
+          example: ["cpu", "memory"]
+
+    GetRuleResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        synapse_id:
+          type: string
+          format: uuid
+        action_type:
+          type: string
+        condition_json:
+          type: object
+          additionalProperties: true
+        template_type:
+          type: string
+        template_domain:
+          type: string
+        template_props:
+          type: object
+          additionalProperties: true
+        event_types:
+          type: array
+          items:
+            type: string
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-02-10T14:30:00Z"
+
+    RegisterPatternRequest:
+      type: object
+      required: [depth, min_count]
+      properties:
+        depth:
+          type: integer
+          example: 4
+        min_count:
+          type: integer
+          example: 2
+        derived_types:
+          type: array
+          items:
+            type: string
+          example: ["alert"]
+        domains:
+          type: array
+          items:
+            type: string
+          example: ["infra"]
+
+    GetPatternResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        synapse_id:
+          type: string
+          format: uuid
+        depth:
+          type: integer
+        min_count:
+          type: integer
+        derived_types:
+          type: array
+          items:
+            type: string
+        domains:
+          type: array
+          items:
+            type: string
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-02-10T14:30:00Z"
+
+    RegisterCompositionRequest:
+      type: object
+      required: [derived_template_type, derived_template_domain]
+      properties:
+        time_window_within:
+          type: integer
+          nullable: true
+          example: 60
+        time_window_unit:
+          type: string
+          nullable: true
+          example: "second"
+        derived_template_type:
+          type: string
+          example: "composite"
+        derived_template_domain:
+          type: string
+          example: "security"
+        derived_template_props:
+          type: object
+          additionalProperties: true
+          example: {"merged": true}
+        required_patterns:
+          type: array
+          items:
+            $ref: "#/components/schemas/CompositionRequiredPatternDTO"
+
+    GetCompositionResponse:
+      type: object
+      properties:
+        composition_id:
+          type: string
+          format: uuid
+        synapse_id:
+          type: string
+          format: uuid
+        time_window_within:
+          type: integer
+          nullable: true
+        time_window_unit:
+          type: string
+          nullable: true
+        derived_template_type:
+          type: string
+        derived_template_domain:
+          type: string
+        derived_template_props:
+          type: object
+          additionalProperties: true
+        required_patterns:
+          type: array
+          items:
+            $ref: "#/components/schemas/CompositionRequiredPatternDTO"
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-02-10T14:30:00Z"
+
+    CompositionRequiredPatternDTO:
+      type: object
+      required: [event_type, event_domain, min_occurrences]
+      properties:
+        event_type:
+          type: string
+          example: "cpu"
+        event_domain:
+          type: string
+          example: "infra"
+        min_occurrences:
+          type: integer
+          example: 2
