@@ -39,6 +39,16 @@ type Event struct {
 	CreatedAt   time.Time
 }
 
+// DomainEvent mirrors event_network.Event without importing that package.
+// Used for bridging between the service layer and the in-memory runtime.
+type DomainEvent struct {
+	ID          uuid.UUID
+	EventType   string
+	EventDomain string
+	Properties  map[string]any
+	Timestamp   time.Time
+}
+
 type Edge struct {
 	FromEventID uuid.UUID
 	ToEventID   uuid.UUID

@@ -2,6 +2,13 @@
 //
 // Every method works with clean domain types from service/models,
 // translating to/from repository types internally.
+//
+// Architecture (CQRS):
+//   - Configuration (synapse, rules, patterns, compositions) is read/written
+//     through PostgreSQL.
+//   - The event graph is written to PostgreSQL first (source of truth), then
+//     reflected into an in-memory SynapseRuntime for fast graph traversals.
+//   - All graph queries (Children, Parents, etc.) are served from memory.
 package service
 
 import (
@@ -11,62 +18,70 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	en "github.com/jtomasevic/synapse/pkg/event_network"
 	"github.com/jtomasevic/synapse/pkg/service/models"
 	"github.com/jtomasevic/synapse/pkg/storage/repository"
 )
 
 // SynapseService defines the public Synapse API.
 type SynapseService interface {
-	// RegisterSynapse creates a new, empty Synapse instance with the given
-	// description and returns its generated ID.
-	RegisterSynapse(ctx context.Context, name string) (string, error)
+	// --- Configuration (PG read/write) ---
 
+	RegisterSynapse(ctx context.Context, name string) (string, error)
 	GetSynapse(ctx context.Context, synapseID string) (models.SynapseInstance, error)
 
+	AddRule(ctx context.Context, synapseID string, rule models.Rule) (string, error)
+	GetRule(ctx context.Context, ruleID string) (models.Rule, error)
 	GetSynapseRules(ctx context.Context, synapseID string) ([]models.Rule, error)
 
+	RegisterPattern(ctx context.Context, synapseID string, config models.PatternWatcherConfig) (string, error)
+	GetPattern(ctx context.Context, patternID string) (models.PatternWatcherConfig, error)
 	GetSynapsePatterns(ctx context.Context, synapseID string) ([]models.PatternWatcherConfig, error)
 
+	RegisterCompositionPattern(ctx context.Context, synapseID string, spec models.CompositionSpec) (string, error)
+	GetCompositionPattern(ctx context.Context, compositionID string) (models.CompositionSpec, error)
 	GetSynapsePattternCompositions(ctx context.Context, synapseID string) ([]models.CompositionSpec, error)
 
-	// AddRule creates a new rule bound to a synapse. The operation is
-	// transactional: it inserts the rule row and all its event-type bindings
-	// atomically. Returns the generated rule ID.
-	AddRule(ctx context.Context, synapseID string, rule models.Rule) (string, error)
+	// --- Event graph (PG write → in-memory sync) ---
 
-	// GetRule retrieves a rule by ID, including its event-type bindings.
-	GetRule(ctx context.Context, ruleID string) (models.Rule, error)
+	// AddEvent adds a raw event node to the synapse's event graph. The event
+	// is persisted to PG and added to the in-memory network, but NO rule
+	// evaluation or pattern matching is triggered. Returns the generated event ID.
+	AddEvent(ctx context.Context, synapseID string, event models.DomainEvent) (string, error)
 
-	// RegisterPattern creates a pattern watcher configuration bound to a
-	// synapse. The config describes depth, min count, and watch spec
-	// (derived types / domains). Returns the generated config ID.
-	RegisterPattern(ctx context.Context, synapseID string, config models.PatternWatcherConfig) (string, error)
+	// IngestEvent adds an event to the synapse. The event is persisted to PG,
+	// then processed by the in-memory runtime (rules fire, derived events
+	// are created, patterns are checked). Returns the generated event ID.
+	IngestEvent(ctx context.Context, synapseID string, event models.DomainEvent) (string, error)
 
-	GetPattern(ctx context.Context, patternID string) (models.PatternWatcherConfig, error)
+	// --- Graph queries (served from in-memory runtime) ---
 
-	// RegisterComposition creates a pattern composition spec bound to a
-	// synapse. The operation is transactional: it inserts the composition
-	// spec row and all its required pattern rows atomically. Returns the
-	// generated composition ID.
-	RegisterCompositionPattern(ctx context.Context, synapseID string, spec models.CompositionSpec) (string, error)
-
-	GetCompositionPattern(ctx context.Context, compositionID string) (models.CompositionSpec, error)
+	Children(ctx context.Context, synapseID string, eventID string) ([]models.DomainEvent, error)
+	Parents(ctx context.Context, synapseID string, eventID string) ([]models.DomainEvent, error)
+	Descendants(ctx context.Context, synapseID string, eventID string, maxDepth int) ([]models.DomainEvent, error)
+	Ancestors(ctx context.Context, synapseID string, eventID string, maxDepth int) ([]models.DomainEvent, error)
+	Siblings(ctx context.Context, synapseID string, eventID string) ([]models.DomainEvent, error)
+	Cousins(ctx context.Context, synapseID string, eventID string, maxDepth int) ([]models.DomainEvent, error)
+	Peers(ctx context.Context, synapseID string, eventID string) ([]models.DomainEvent, error)
 }
 
-// synapseService is the concrete implementation backed by a pgxpool.Pool
-// (needed for transactions) and a repository.Querier for non-transactional reads.
+// synapseService is the concrete implementation.
+//
+// It holds a pgxpool.Pool for transactional DB operations, a Querier for
+// simple reads/writes, and a runtimeManager that maintains one in-memory
+// SynapseRuntime per active synapse.
 type synapseService struct {
-	pool *pgxpool.Pool
-	q    repository.Querier
+	pool     *pgxpool.Pool
+	q        repository.Querier
+	runtimes *runtimeManager
 }
 
 // NewSynapseService returns a ready-to-use SynapseService.
-// The pool is used for transactional methods; a Queries instance is derived
-// from it for simple reads/writes.
 func NewSynapseService(pool *pgxpool.Pool) SynapseService {
 	return &synapseService{
-		pool: pool,
-		q:    repository.New(pool),
+		pool:     pool,
+		q:        repository.New(pool),
+		runtimes: newRuntimeManager(),
 	}
 }
 
@@ -94,8 +109,13 @@ func (s *synapseService) RegisterSynapse(ctx context.Context, name string) (stri
 		return "", newServiceError(ErrInitGlobalRevision, err)
 	}
 
-	// Prove mapping wiring is correct with the DB-populated timestamps.
 	_ = models.SynapseInstanceFromRepo(repoRow)
+
+	// Create an empty runtime for this new synapse.
+	net := newPersistentNetwork(s.q, id)
+	rt := en.NewSynapseWithNetwork(net, nil)
+	s.runtimes.put(id, rt)
+
 	return id, nil
 }
 
@@ -152,7 +172,16 @@ func (s *synapseService) AddRule(ctx context.Context, synapseID string, rule mod
 		return "", newServiceError(ErrCommittingTransaction, err)
 	}
 
-	_ = models.RuleFromRepo(repoRule) // validate mapping
+	_ = models.RuleFromRepo(repoRule)
+
+	// Sync to in-memory runtime if loaded.
+	if rt := s.runtimes.get(synapseID); rt != nil {
+		domainRule, err := repoRuleToDomain(repoRule)
+		if err == nil && len(rule.EventTypes) > 0 {
+			rt.RegisterRuleForTypes(rule.EventTypes, domainRule)
+		}
+	}
+
 	return ruleID, nil
 }
 
@@ -382,4 +411,200 @@ func (s *synapseService) GetSynapsePattternCompositions(ctx context.Context, syn
 		specs[i] = models.CompositionSpecFromRepoWithPatterns(r, patterns)
 	}
 	return specs, nil
+}
+
+// ===========================================================================
+// Event graph (CQRS write path)
+// ===========================================================================
+
+// AddEvent adds a raw event node to the event graph without triggering
+// rule evaluation or pattern matching. The event is persisted to PostgreSQL
+// through the persistent network, then added to the in-memory graph.
+func (s *synapseService) AddEvent(ctx context.Context, synapseID string, event models.DomainEvent) (string, error) {
+	rt, err := s.runtimes.getOrLoad(ctx, s.q, synapseID)
+	if err != nil {
+		return "", newServiceError(ErrLoadingRuntime, err)
+	}
+
+	domainEvent := en.Event{
+		EventType:   event.EventType,
+		EventDomain: event.EventDomain,
+		Properties:  event.Properties,
+		Timestamp:   event.Timestamp,
+	}
+
+	id, err := rt.GetNetwork().AddEvent(domainEvent)
+	if err != nil {
+		return "", newServiceError(ErrAddingEvent, err)
+	}
+
+	return id.String(), nil
+}
+
+// IngestEvent adds an event to the synapse's event graph. The event is
+// persisted to PostgreSQL through the persistent network wrapper, then
+// the in-memory runtime processes it (fires rules, materializes derived
+// events, checks patterns). All derived events/edges are also persisted
+// automatically by the persistent network.
+func (s *synapseService) IngestEvent(ctx context.Context, synapseID string, event models.DomainEvent) (string, error) {
+	rt, err := s.runtimes.getOrLoad(ctx, s.q, synapseID)
+	if err != nil {
+		return "", newServiceError(ErrLoadingRuntime, err)
+	}
+
+	domainEvent := en.Event{
+		EventType:   event.EventType,
+		EventDomain: event.EventDomain,
+		Properties:  event.Properties,
+		Timestamp:   event.Timestamp,
+	}
+
+	id, err := rt.Ingest(domainEvent)
+	if err != nil {
+		return "", newServiceError(ErrIngestingEvent, err)
+	}
+
+	return id.String(), nil
+}
+
+// ===========================================================================
+// Graph queries (CQRS read path — served from in-memory runtime)
+// ===========================================================================
+
+func (s *synapseService) getRuntime(ctx context.Context, synapseID string) (*en.SynapseRuntime, error) {
+	rt, err := s.runtimes.getOrLoad(ctx, s.q, synapseID)
+	if err != nil {
+		return nil, newServiceError(ErrLoadingRuntime, err)
+	}
+	return rt, nil
+}
+
+func parseEventID(raw string) (en.EventID, error) {
+	return uuid.Parse(raw)
+}
+
+func domainEventsToDomainModels(events []en.Event) []models.DomainEvent {
+	out := make([]models.DomainEvent, len(events))
+	for i, e := range events {
+		out[i] = models.DomainEvent{
+			ID:          e.ID,
+			EventType:   e.EventType,
+			EventDomain: e.EventDomain,
+			Properties:  e.Properties,
+			Timestamp:   e.Timestamp,
+		}
+	}
+	return out
+}
+
+func (s *synapseService) Children(ctx context.Context, synapseID string, eventID string) ([]models.DomainEvent, error) {
+	rt, err := s.getRuntime(ctx, synapseID)
+	if err != nil {
+		return nil, err
+	}
+	id, err := parseEventID(eventID)
+	if err != nil {
+		return nil, newServiceError(ErrGraphQuery, err)
+	}
+	events, err := rt.GetNetwork().Children(id)
+	if err != nil {
+		return nil, newServiceError(ErrGraphQuery, err)
+	}
+	return domainEventsToDomainModels(events), nil
+}
+
+func (s *synapseService) Parents(ctx context.Context, synapseID string, eventID string) ([]models.DomainEvent, error) {
+	rt, err := s.getRuntime(ctx, synapseID)
+	if err != nil {
+		return nil, err
+	}
+	id, err := parseEventID(eventID)
+	if err != nil {
+		return nil, newServiceError(ErrGraphQuery, err)
+	}
+	events, err := rt.GetNetwork().Parents(id)
+	if err != nil {
+		return nil, newServiceError(ErrGraphQuery, err)
+	}
+	return domainEventsToDomainModels(events), nil
+}
+
+func (s *synapseService) Descendants(ctx context.Context, synapseID string, eventID string, maxDepth int) ([]models.DomainEvent, error) {
+	rt, err := s.getRuntime(ctx, synapseID)
+	if err != nil {
+		return nil, err
+	}
+	id, err := parseEventID(eventID)
+	if err != nil {
+		return nil, newServiceError(ErrGraphQuery, err)
+	}
+	events, err := rt.GetNetwork().Descendants(id, maxDepth)
+	if err != nil {
+		return nil, newServiceError(ErrGraphQuery, err)
+	}
+	return domainEventsToDomainModels(events), nil
+}
+
+func (s *synapseService) Ancestors(ctx context.Context, synapseID string, eventID string, maxDepth int) ([]models.DomainEvent, error) {
+	rt, err := s.getRuntime(ctx, synapseID)
+	if err != nil {
+		return nil, err
+	}
+	id, err := parseEventID(eventID)
+	if err != nil {
+		return nil, newServiceError(ErrGraphQuery, err)
+	}
+	events, err := rt.GetNetwork().Ancestors(id, maxDepth)
+	if err != nil {
+		return nil, newServiceError(ErrGraphQuery, err)
+	}
+	return domainEventsToDomainModels(events), nil
+}
+
+func (s *synapseService) Siblings(ctx context.Context, synapseID string, eventID string) ([]models.DomainEvent, error) {
+	rt, err := s.getRuntime(ctx, synapseID)
+	if err != nil {
+		return nil, err
+	}
+	id, err := parseEventID(eventID)
+	if err != nil {
+		return nil, newServiceError(ErrGraphQuery, err)
+	}
+	events, err := rt.GetNetwork().Siblings(id)
+	if err != nil {
+		return nil, newServiceError(ErrGraphQuery, err)
+	}
+	return domainEventsToDomainModels(events), nil
+}
+
+func (s *synapseService) Cousins(ctx context.Context, synapseID string, eventID string, maxDepth int) ([]models.DomainEvent, error) {
+	rt, err := s.getRuntime(ctx, synapseID)
+	if err != nil {
+		return nil, err
+	}
+	id, err := parseEventID(eventID)
+	if err != nil {
+		return nil, newServiceError(ErrGraphQuery, err)
+	}
+	events, err := rt.GetNetwork().Cousins(id, maxDepth)
+	if err != nil {
+		return nil, newServiceError(ErrGraphQuery, err)
+	}
+	return domainEventsToDomainModels(events), nil
+}
+
+func (s *synapseService) Peers(ctx context.Context, synapseID string, eventID string) ([]models.DomainEvent, error) {
+	rt, err := s.getRuntime(ctx, synapseID)
+	if err != nil {
+		return nil, err
+	}
+	id, err := parseEventID(eventID)
+	if err != nil {
+		return nil, newServiceError(ErrGraphQuery, err)
+	}
+	events, err := rt.GetNetwork().Peers(id)
+	if err != nil {
+		return nil, newServiceError(ErrGraphQuery, err)
+	}
+	return domainEventsToDomainModels(events), nil
 }

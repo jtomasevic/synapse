@@ -89,6 +89,10 @@ func TestServiceError_AllSentinels(t *testing.T) {
 		ErrListingRules,
 		ErrListingPatterns,
 		ErrListingCompositions,
+		ErrLoadingRuntime,
+		ErrAddingEvent,
+		ErrIngestingEvent,
+		ErrGraphQuery,
 	}
 	for _, s := range sentinels {
 		err := newServiceError(s, fmt.Errorf("cause"))

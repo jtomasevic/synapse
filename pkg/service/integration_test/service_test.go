@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jtomasevic/synapse/pkg/service"
 	"github.com/jtomasevic/synapse/pkg/service/models"
@@ -803,4 +804,476 @@ func TestGetSynapsePattternCompositions_Empty_Integration(t *testing.T) {
 	specs, err := svc.GetSynapsePattternCompositions(ctx, synapseID)
 	require.NoError(t, err)
 	assert.Empty(t, specs)
+}
+
+// =========================================================================
+// IngestEvent + Graph query tests (CQRS)
+// =========================================================================
+
+func TestIngestEvent_Integration(t *testing.T) {
+	pool := getTestPool(t)
+	svc, synapseID := newService(t, pool, "ingest-event-synapse")
+	ctx := context.Background()
+
+	event := models.DomainEvent{
+		EventType:   "cpu_spike",
+		EventDomain: "infrastructure",
+		Properties:  map[string]any{"host": "srv-01", "value": 95.3},
+	}
+
+	idStr, err := svc.IngestEvent(ctx, synapseID, event)
+	require.NoError(t, err)
+	assert.NotEmpty(t, idStr)
+
+	// Verify the event is persisted in PG.
+	q := repository.New(pool)
+	dbEvents, err := q.GetAllEventsBySynapse(ctx, synapseID)
+	require.NoError(t, err)
+	require.Len(t, dbEvents, 1)
+	assert.Equal(t, "cpu_spike", dbEvents[0].EventType)
+	assert.Equal(t, "infrastructure", dbEvents[0].EventDomain)
+}
+
+func TestIngestAndQueryChildren_Integration(t *testing.T) {
+	pool := getTestPool(t)
+	svc, synapseID := newService(t, pool, "graph-children-synapse")
+	ctx := context.Background()
+
+	// Ingest two leaf events.
+	e1, err := svc.IngestEvent(ctx, synapseID, models.DomainEvent{
+		EventType: "cpu_spike", EventDomain: "infra",
+	})
+	require.NoError(t, err)
+
+	e2, err := svc.IngestEvent(ctx, synapseID, models.DomainEvent{
+		EventType: "mem_pressure", EventDomain: "infra",
+	})
+	require.NoError(t, err)
+
+	// Leaf events should have no children.
+	children, err := svc.Children(ctx, synapseID, e1)
+	require.NoError(t, err)
+	assert.Empty(t, children)
+
+	// Parents of leaf events (no rules registered, so no derived events).
+	parents, err := svc.Parents(ctx, synapseID, e1)
+	require.NoError(t, err)
+	assert.Empty(t, parents)
+
+	// Peers: same type, no parents.
+	peers, err := svc.Peers(ctx, synapseID, e1)
+	require.NoError(t, err)
+	// e1 is the only cpu_spike so peers should be empty (peers excludes self).
+	_ = peers
+
+	_ = e2
+}
+
+func TestIngestAndQueryPeers_Integration(t *testing.T) {
+	pool := getTestPool(t)
+	svc, synapseID := newService(t, pool, "graph-peers-synapse")
+	ctx := context.Background()
+
+	// Ingest multiple events of the same type.
+	e1, err := svc.IngestEvent(ctx, synapseID, models.DomainEvent{
+		EventType: "cpu_spike", EventDomain: "infra",
+	})
+	require.NoError(t, err)
+
+	_, err = svc.IngestEvent(ctx, synapseID, models.DomainEvent{
+		EventType: "cpu_spike", EventDomain: "infra",
+	})
+	require.NoError(t, err)
+
+	// Peers of e1 should include the second cpu_spike.
+	peers, err := svc.Peers(ctx, synapseID, e1)
+	require.NoError(t, err)
+	assert.Len(t, peers, 1)
+	assert.Equal(t, "cpu_spike", peers[0].EventType)
+}
+
+func TestIngestMultipleAndDescendants_Integration(t *testing.T) {
+	pool := getTestPool(t)
+	svc, synapseID := newService(t, pool, "graph-descendants-synapse")
+	ctx := context.Background()
+
+	e1, err := svc.IngestEvent(ctx, synapseID, models.DomainEvent{
+		EventType: "error", EventDomain: "app",
+	})
+	require.NoError(t, err)
+
+	// Descendants of a leaf event with no rules → empty.
+	desc, err := svc.Descendants(ctx, synapseID, e1, 5)
+	require.NoError(t, err)
+	assert.Empty(t, desc)
+
+	// Ancestors of a leaf event → empty.
+	anc, err := svc.Ancestors(ctx, synapseID, e1, 5)
+	require.NoError(t, err)
+	assert.Empty(t, anc)
+}
+
+// =========================================================================
+// Siblings + Cousins (empty for leaf events)
+// =========================================================================
+
+func TestSiblings_EmptyLeaf_Integration(t *testing.T) {
+	pool := getTestPool(t)
+	svc, synapseID := newService(t, pool, "graph-siblings-synapse")
+	ctx := context.Background()
+
+	e1, err := svc.IngestEvent(ctx, synapseID, models.DomainEvent{
+		EventType: "cpu_spike", EventDomain: "infra",
+	})
+	require.NoError(t, err)
+
+	sibs, err := svc.Siblings(ctx, synapseID, e1)
+	require.NoError(t, err)
+	assert.Empty(t, sibs)
+}
+
+func TestCousins_EmptyLeaf_Integration(t *testing.T) {
+	pool := getTestPool(t)
+	svc, synapseID := newService(t, pool, "graph-cousins-synapse")
+	ctx := context.Background()
+
+	e1, err := svc.IngestEvent(ctx, synapseID, models.DomainEvent{
+		EventType: "cpu_spike", EventDomain: "infra",
+	})
+	require.NoError(t, err)
+
+	cousins, err := svc.Cousins(ctx, synapseID, e1, 3)
+	require.NoError(t, err)
+	assert.Empty(t, cousins)
+}
+
+// =========================================================================
+// Graph query error paths — invalid UUID
+// =========================================================================
+
+func TestGraphQueries_InvalidEventID_Integration(t *testing.T) {
+	pool := getTestPool(t)
+	svc, synapseID := newService(t, pool, "graph-bad-id-synapse")
+	ctx := context.Background()
+
+	badID := "not-a-uuid"
+
+	_, err := svc.Children(ctx, synapseID, badID)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, service.ErrGraphQuery))
+
+	_, err = svc.Parents(ctx, synapseID, badID)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, service.ErrGraphQuery))
+
+	_, err = svc.Descendants(ctx, synapseID, badID, 3)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, service.ErrGraphQuery))
+
+	_, err = svc.Ancestors(ctx, synapseID, badID, 3)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, service.ErrGraphQuery))
+
+	_, err = svc.Siblings(ctx, synapseID, badID)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, service.ErrGraphQuery))
+
+	_, err = svc.Cousins(ctx, synapseID, badID, 3)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, service.ErrGraphQuery))
+
+	_, err = svc.Peers(ctx, synapseID, badID)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, service.ErrGraphQuery))
+}
+
+// =========================================================================
+// Graph query error paths — valid UUID but event not in network
+// =========================================================================
+
+func TestGraphQueries_NonExistentEvent_Integration(t *testing.T) {
+	pool := getTestPool(t)
+	svc, synapseID := newService(t, pool, "graph-missing-event-synapse")
+	ctx := context.Background()
+
+	// Ingest one event so the runtime is alive, then query a different UUID.
+	_, err := svc.IngestEvent(ctx, synapseID, models.DomainEvent{
+		EventType: "ping", EventDomain: "test",
+	})
+	require.NoError(t, err)
+
+	missingID := "aaaa0000-0000-0000-0000-000000000001"
+
+	// Methods that explicitly check event existence → error.
+	_, err = svc.Children(ctx, synapseID, missingID)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, service.ErrGraphQuery))
+
+	_, err = svc.Parents(ctx, synapseID, missingID)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, service.ErrGraphQuery))
+
+	_, err = svc.Ancestors(ctx, synapseID, missingID, 3)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, service.ErrGraphQuery))
+
+	_, err = svc.Siblings(ctx, synapseID, missingID)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, service.ErrGraphQuery))
+
+	_, err = svc.Cousins(ctx, synapseID, missingID, 3)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, service.ErrGraphQuery))
+
+	_, err = svc.Peers(ctx, synapseID, missingID)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, service.ErrGraphQuery))
+
+	// Descendants uses DFS and doesn't check existence upfront;
+	// a missing event simply yields empty results.
+	desc, err := svc.Descendants(ctx, synapseID, missingID, 3)
+	require.NoError(t, err)
+	assert.Empty(t, desc)
+}
+
+// =========================================================================
+// IngestEvent — additional paths
+// =========================================================================
+
+func TestIngestEvent_NilProperties_Integration(t *testing.T) {
+	pool := getTestPool(t)
+	svc, synapseID := newService(t, pool, "ingest-nil-props-synapse")
+	ctx := context.Background()
+
+	idStr, err := svc.IngestEvent(ctx, synapseID, models.DomainEvent{
+		EventType:   "heartbeat",
+		EventDomain: "monitoring",
+	})
+	require.NoError(t, err)
+	assert.NotEmpty(t, idStr)
+
+	q := repository.New(pool)
+	dbEvents, err := q.GetAllEventsBySynapse(ctx, synapseID)
+	require.NoError(t, err)
+	require.Len(t, dbEvents, 1)
+	assert.Equal(t, "heartbeat", dbEvents[0].EventType)
+}
+
+func TestIngestEvent_VerifyInMemory_Integration(t *testing.T) {
+	pool := getTestPool(t)
+	svc, synapseID := newService(t, pool, "ingest-verify-mem-synapse")
+	ctx := context.Background()
+
+	e1, err := svc.IngestEvent(ctx, synapseID, models.DomainEvent{
+		EventType: "login", EventDomain: "auth",
+	})
+	require.NoError(t, err)
+
+	// The event should exist in the in-memory network: Children returns
+	// empty (not error) for a known event.
+	children, err := svc.Children(ctx, synapseID, e1)
+	require.NoError(t, err)
+	assert.Empty(t, children)
+}
+
+func TestIngestEvent_MultipleEvents_Integration(t *testing.T) {
+	pool := getTestPool(t)
+	svc, synapseID := newService(t, pool, "ingest-multi-synapse")
+	ctx := context.Background()
+
+	for i := 0; i < 5; i++ {
+		_, err := svc.IngestEvent(ctx, synapseID, models.DomainEvent{
+			EventType:   "tick",
+			EventDomain: "timer",
+			Properties:  map[string]any{"seq": i},
+		})
+		require.NoError(t, err)
+	}
+
+	q := repository.New(pool)
+	dbEvents, err := q.GetAllEventsBySynapse(ctx, synapseID)
+	require.NoError(t, err)
+	assert.Len(t, dbEvents, 5)
+}
+
+// =========================================================================
+// Runtime loading from existing DB data (getOrLoad / loadFromDB)
+// =========================================================================
+
+func TestRuntimeLoadFromDB_Integration(t *testing.T) {
+	pool := getTestPool(t)
+	ctx := context.Background()
+
+	// Phase 1: Create a synapse with events using one service instance.
+	svc1 := service.NewSynapseService(pool)
+	synapseID, err := svc1.RegisterSynapse(ctx, "runtime-reload-synapse")
+	require.NoError(t, err)
+	t.Cleanup(func() { cleanupSynapse(t, pool, synapseID) })
+
+	e1, err := svc1.IngestEvent(ctx, synapseID, models.DomainEvent{
+		EventType: "cpu_spike", EventDomain: "infra",
+		Properties: map[string]any{"host": "srv-01"},
+	})
+	require.NoError(t, err)
+
+	e2, err := svc1.IngestEvent(ctx, synapseID, models.DomainEvent{
+		EventType: "cpu_spike", EventDomain: "infra",
+		Properties: map[string]any{"host": "srv-02"},
+	})
+	require.NoError(t, err)
+
+	// Phase 2: Create a FRESH service (empty runtimeManager). This forces
+	// getOrLoad to hydrate the runtime from the database.
+	svc2 := service.NewSynapseService(pool)
+
+	// The events should be loadable from DB into the fresh runtime.
+	children, err := svc2.Children(ctx, synapseID, e1)
+	require.NoError(t, err)
+	assert.Empty(t, children)
+
+	peers, err := svc2.Peers(ctx, synapseID, e1)
+	require.NoError(t, err)
+	require.Len(t, peers, 1)
+	assert.Equal(t, "cpu_spike", peers[0].EventType)
+
+	// e2 should also be queryable.
+	peers2, err := svc2.Peers(ctx, synapseID, e2)
+	require.NoError(t, err)
+	require.Len(t, peers2, 1)
+}
+
+func TestRuntimeLoadWithRulesAndPatterns_Integration(t *testing.T) {
+	pool := getTestPool(t)
+	ctx := context.Background()
+
+	// Phase 1: Create synapse, add a rule (no condition / no event-type bindings
+	// so it won't fire during ingestion) and a pattern config.
+	svc1 := service.NewSynapseService(pool)
+	synapseID, err := svc1.RegisterSynapse(ctx, "runtime-rules-reload")
+	require.NoError(t, err)
+	t.Cleanup(func() { cleanupSynapse(t, pool, synapseID) })
+
+	_, err = svc1.AddRule(ctx, synapseID, models.Rule{
+		ActionType:     "derive",
+		TemplateType:   "alert",
+		TemplateDomain: "infra",
+	})
+	require.NoError(t, err)
+
+	_, err = svc1.RegisterPattern(ctx, synapseID, models.PatternWatcherConfig{
+		Depth:        4,
+		MinCount:     2,
+		DerivedTypes: []string{"alert"},
+	})
+	require.NoError(t, err)
+
+	// Phase 2: Fresh service instance forces full DB load including rules
+	// and pattern configs.
+	svc2 := service.NewSynapseService(pool)
+
+	// Verify runtime hydration succeeded by ingesting an event.
+	e1, err := svc2.IngestEvent(ctx, synapseID, models.DomainEvent{
+		EventType: "cpu_spike", EventDomain: "infra",
+	})
+	require.NoError(t, err)
+	assert.NotEmpty(t, e1)
+}
+
+// =========================================================================
+// AddRule — verify runtime sync
+// =========================================================================
+
+func TestAddRule_SyncsToRuntime_Integration(t *testing.T) {
+	pool := getTestPool(t)
+	svc, synapseID := newService(t, pool, "rule-sync-synapse")
+	ctx := context.Background()
+
+	// Add a rule with event type bindings but NO condition to avoid
+	// compilation errors. RegisterSynapse creates the runtime, so
+	// AddRule syncs the rule to it.
+	ruleID, err := svc.AddRule(ctx, synapseID, models.Rule{
+		ActionType:     "derive",
+		TemplateType:   "combined",
+		TemplateDomain: "test",
+		EventTypes:     []string{"trigger"},
+	})
+	require.NoError(t, err)
+	assert.NotEmpty(t, ruleID)
+
+	// Verify the rule is retrievable.
+	got, err := svc.GetRule(ctx, ruleID)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"trigger"}, got.EventTypes)
+	assert.Equal(t, "combined", got.TemplateType)
+
+	// Ingest an event of a different type (not bound to the rule) so
+	// the rule doesn't try to fire. This proves the runtime is alive
+	// and the rule sync didn't break anything.
+	e1, err := svc.IngestEvent(ctx, synapseID, models.DomainEvent{
+		EventType: "other", EventDomain: "test",
+	})
+	require.NoError(t, err)
+	assert.NotEmpty(t, e1)
+}
+
+// =========================================================================
+// AddEvent — raw graph node insertion (no rule/pattern processing)
+// =========================================================================
+
+func TestAddEvent_Integration(t *testing.T) {
+	pool := getTestPool(t)
+	svc, synapseID := newService(t, pool, "add-event-synapse")
+	ctx := context.Background()
+
+	// Add a raw event.
+	id1, err := svc.AddEvent(ctx, synapseID, models.DomainEvent{
+		EventType:   "cpu_spike",
+		EventDomain: "infra",
+		Properties:  map[string]any{"host": "web-01"},
+	})
+	require.NoError(t, err)
+	assert.NotEmpty(t, id1)
+
+	_, parseErr := uuid.Parse(id1)
+	require.NoError(t, parseErr, "returned id should be a valid UUID")
+
+	// Add a second event of the same type.
+	id2, err := svc.AddEvent(ctx, synapseID, models.DomainEvent{
+		EventType:   "cpu_spike",
+		EventDomain: "infra",
+		Properties:  map[string]any{"host": "web-02"},
+	})
+	require.NoError(t, err)
+	assert.NotEmpty(t, id2)
+	assert.NotEqual(t, id1, id2)
+
+	// Verify graph queryable: Peers should return the other event.
+	peers, err := svc.Peers(ctx, synapseID, id1)
+	require.NoError(t, err)
+	require.Len(t, peers, 1)
+	assert.Equal(t, id2, peers[0].ID.String())
+}
+
+func TestAddEvent_NilProperties_Integration(t *testing.T) {
+	pool := getTestPool(t)
+	svc, synapseID := newService(t, pool, "add-event-nil-synapse")
+	ctx := context.Background()
+
+	id, err := svc.AddEvent(ctx, synapseID, models.DomainEvent{
+		EventType:   "simple",
+		EventDomain: "test",
+	})
+	require.NoError(t, err)
+	assert.NotEmpty(t, id)
+}
+
+func TestAddEvent_InvalidSynapse_Integration(t *testing.T) {
+	pool := getTestPool(t)
+	svc := service.NewSynapseService(pool)
+	ctx := context.Background()
+
+	_, err := svc.AddEvent(ctx, "non-existent", models.DomainEvent{
+		EventType: "x",
+	})
+	require.Error(t, err)
 }

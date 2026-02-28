@@ -170,3 +170,41 @@ func CompositionToResponse(spec models.CompositionSpec) GetCompositionResponse {
 		CreatedAt:             spec.CreatedAt.UTC().Format("2006-01-02T15:04:05Z"),
 	}
 }
+
+// =========================================================================
+// Event inbound / outbound
+// =========================================================================
+
+// DomainEventFromRequest converts an IngestEventRequest DTO into a
+// service-layer DomainEvent.
+func DomainEventFromRequest(req IngestEventRequest) models.DomainEvent {
+	return models.DomainEvent{
+		EventType:   req.EventType,
+		EventDomain: req.EventDomain,
+		Properties:  req.Properties,
+	}
+}
+
+// DomainEventToResponse converts a service-layer DomainEvent into a
+// DomainEventResponse DTO.
+func DomainEventToResponse(e models.DomainEvent) DomainEventResponse {
+	return DomainEventResponse{
+		ID:          e.ID.String(),
+		EventType:   e.EventType,
+		EventDomain: e.EventDomain,
+		Properties:  e.Properties,
+		Timestamp:   e.Timestamp.UTC().Format("2006-01-02T15:04:05Z"),
+	}
+}
+
+// DomainEventsToResponse converts a slice of DomainEvents to response DTOs.
+func DomainEventsToResponse(events []models.DomainEvent) []DomainEventResponse {
+	if events == nil {
+		return nil
+	}
+	out := make([]DomainEventResponse, len(events))
+	for i, e := range events {
+		out[i] = DomainEventToResponse(e)
+	}
+	return out
+}

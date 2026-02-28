@@ -48,6 +48,12 @@ var (
 
 	// GetSynapsePattternCompositions errors
 	ErrListingCompositions = errors.New("listing compositions for synapse")
+
+	// Runtime / graph errors
+	ErrLoadingRuntime = errors.New("loading synapse runtime")
+	ErrAddingEvent    = errors.New("adding event to graph")
+	ErrIngestingEvent = errors.New("ingesting event")
+	ErrGraphQuery     = errors.New("graph query failed")
 )
 
 // ServiceError is the public interface for all service-layer errors.

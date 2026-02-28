@@ -652,3 +652,52 @@ func (cml CompositionMatchLog) ToRepo() repository.CompositionMatchLog {
 		Patterns:       mapToRawJSON(cml.Patterns),
 	}
 }
+
+// =========================================================================
+// Domain ↔ Service event conversions
+//
+// These bridge the event_network.Event (runtime domain type) and
+// models.Event (service layer type). They are used by the service layer
+// to translate between the in-memory runtime and the persistence/API layer.
+// =========================================================================
+
+// EventToDomain converts a service-layer Event into an event_network.Event.
+func EventToDomain(e Event) DomainEvent {
+	return DomainEvent{
+		ID:          e.ID,
+		EventType:   e.EventType,
+		EventDomain: e.EventDomain,
+		Properties:  e.Properties,
+		Timestamp:   e.Timestamp,
+	}
+}
+
+// EventFromDomain converts an event_network.Event into a service-layer Event.
+func EventFromDomain(d DomainEvent, synapseID string) Event {
+	return Event{
+		ID:          d.ID,
+		SynapseID:   synapseID,
+		EventType:   d.EventType,
+		EventDomain: d.EventDomain,
+		Properties:  d.Properties,
+		Timestamp:   d.Timestamp,
+	}
+}
+
+// EventsToDomain converts a slice of service-layer Events to domain Events.
+func EventsToDomain(events []Event) []DomainEvent {
+	out := make([]DomainEvent, len(events))
+	for i, e := range events {
+		out[i] = EventToDomain(e)
+	}
+	return out
+}
+
+// EventsFromDomain converts a slice of domain Events to service-layer Events.
+func EventsFromDomain(events []DomainEvent, synapseID string) []Event {
+	out := make([]Event, len(events))
+	for i, d := range events {
+		out[i] = EventFromDomain(d, synapseID)
+	}
+	return out
+}

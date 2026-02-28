@@ -1,0 +1,49 @@
+# =============================================================================
+# Synapse — Docker Compose
+# =============================================================================
+#
+# Services:
+#   db  — PostgreSQL database (reuses the existing synapse-db image)
+#   api — Synapse REST API server
+#
+# Usage:
+#   docker compose up -d          # start everything
+#   docker compose down           # stop everything
+#   docker compose logs -f api    # tail API logs
+#
+# After startup:
+#   API:        http://localhost:8080
+#   Swagger UI: http://localhost:8080/docs
+# =============================================================================
+
+services:
+  db:
+    build:
+      context: pkg/storage/docker
+    container_name: synapse-db
+    environment:
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - synapse-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U synapse -d synapse"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+      start_period: 5s
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: synapse-api
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  synapse-pgdata:

@@ -39,21 +39,38 @@ func (n *InMemoryEventNetwork) AddEvent(event Event) (EventID, error) {
 }
 
 func (n *InMemoryEventNetwork) AddEdge(from EventID, to EventID, relation string) error {
+	if err := n.ValidateEdge(from, to); err != nil {
+		return err
+	}
+	n.InsertEdge(from, to, relation)
+	return nil
+}
+
+// InsertEvent places an event directly into the cache maps. The caller
+// is responsible for ensuring the ID and Timestamp are already set.
+// This is used by the persistent network wrapper and hydration paths
+// that bypass the normal AddEvent flow (which assigns a new UUID).
+func (n *InMemoryEventNetwork) InsertEvent(event Event) {
+	n.events[event.ID] = event
+	n.eventsByType[event.EventType] = append(n.eventsByType[event.EventType], event)
+}
+
+// InsertEdge adds an edge directly into the adjacency lists without
+// validation. The caller must ensure both endpoints exist.
+func (n *InMemoryEventNetwork) InsertEdge(from, to EventID, relation string) {
+	edge := Edge{From: from, To: to, Relation: relation}
+	n.out[from] = append(n.out[from], edge)
+	n.in[to] = append(n.in[to], edge)
+}
+
+// ValidateEdge checks that both endpoints of an edge exist in the cache.
+func (n *InMemoryEventNetwork) ValidateEdge(from, to EventID) error {
 	if _, ok := n.events[from]; !ok {
 		return fmt.Errorf("from event not found: %s", from)
 	}
 	if _, ok := n.events[to]; !ok {
 		return fmt.Errorf("to event not found: %s", to)
 	}
-
-	edge := Edge{
-		From:     from,
-		To:       to,
-		Relation: relation,
-	}
-
-	n.out[from] = append(n.out[from], edge)
-	n.in[to] = append(n.in[to], edge)
 	return nil
 }
 
