@@ -1,0 +1,18 @@
+# =============================================================================
+# Synapse API — Docker Configuration
+# =============================================================================
+# Used when the API runs inside a Docker container alongside the DB container.
+# The database host is the Docker Compose service name ("db") which resolves
+# via the internal Docker network.
+# =============================================================================
+
+server:
+  addr: ":8080"
+
+database:
+  host: "db"
+  port: 5432
+  user: "synapse"
+  password: "synapse"
+  dbname: "synapse"
+  sslmode: "disable"

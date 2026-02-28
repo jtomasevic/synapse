@@ -237,6 +237,188 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  # --- Graph events (raw node add) ----------------------------------------
+  /synapses/{synapseID}/graph/events:
+    post:
+      operationId: addEvent
+      summary: Add a raw event node to the graph (no rule/pattern processing)
+      description: |
+        Adds an event as a node in the EventGraph without triggering rule
+        evaluation or pattern matching. Use this when you want to populate
+        the graph directly. For full ingestion with rule processing, use
+        POST /synapses/{synapseID}/events instead.
+      tags: [Graph]
+      parameters:
+        - $ref: "#/components/parameters/synapseID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IngestEventRequest"
+      responses:
+        "201":
+          description: Event added to graph
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IDResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  # --- Events (ingest + graph queries) -----------------------------------
+  /synapses/{synapseID}/events:
+    post:
+      operationId: ingestEvent
+      summary: Ingest an event into the synapse
+      tags: [Events]
+      parameters:
+        - $ref: "#/components/parameters/synapseID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IngestEventRequest"
+      responses:
+        "201":
+          description: Event ingested
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IDResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /synapses/{synapseID}/events/{eventID}/children:
+    get:
+      operationId: getChildren
+      summary: Get child events (direct contributors)
+      tags: [Graph]
+      parameters:
+        - $ref: "#/components/parameters/synapseID"
+        - $ref: "#/components/parameters/eventID"
+      responses:
+        "200":
+          description: Child events
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DomainEventResponse"
+
+  /synapses/{synapseID}/events/{eventID}/parents:
+    get:
+      operationId: getParents
+      summary: Get parent events (derived from this event)
+      tags: [Graph]
+      parameters:
+        - $ref: "#/components/parameters/synapseID"
+        - $ref: "#/components/parameters/eventID"
+      responses:
+        "200":
+          description: Parent events
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DomainEventResponse"
+
+  /synapses/{synapseID}/events/{eventID}/descendants:
+    get:
+      operationId: getDescendants
+      summary: Get descendant events (recursive children)
+      tags: [Graph]
+      parameters:
+        - $ref: "#/components/parameters/synapseID"
+        - $ref: "#/components/parameters/eventID"
+        - $ref: "#/components/parameters/maxDepth"
+      responses:
+        "200":
+          description: Descendant events
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DomainEventResponse"
+
+  /synapses/{synapseID}/events/{eventID}/ancestors:
+    get:
+      operationId: getAncestors
+      summary: Get ancestor events (recursive parents)
+      tags: [Graph]
+      parameters:
+        - $ref: "#/components/parameters/synapseID"
+        - $ref: "#/components/parameters/eventID"
+        - $ref: "#/components/parameters/maxDepth"
+      responses:
+        "200":
+          description: Ancestor events
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DomainEventResponse"
+
+  /synapses/{synapseID}/events/{eventID}/siblings:
+    get:
+      operationId: getSiblings
+      summary: Get sibling events (share a common parent)
+      tags: [Graph]
+      parameters:
+        - $ref: "#/components/parameters/synapseID"
+        - $ref: "#/components/parameters/eventID"
+      responses:
+        "200":
+          description: Sibling events
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DomainEventResponse"
+
+  /synapses/{synapseID}/events/{eventID}/cousins:
+    get:
+      operationId: getCousins
+      summary: Get cousin events (shared ancestry, not siblings)
+      tags: [Graph]
+      parameters:
+        - $ref: "#/components/parameters/synapseID"
+        - $ref: "#/components/parameters/eventID"
+        - $ref: "#/components/parameters/maxDepth"
+      responses:
+        "200":
+          description: Cousin events
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DomainEventResponse"
+
+  /synapses/{synapseID}/events/{eventID}/peers:
+    get:
+      operationId: getPeers
+      summary: Get peer events (same type, no parents)
+      tags: [Graph]
+      parameters:
+        - $ref: "#/components/parameters/synapseID"
+        - $ref: "#/components/parameters/eventID"
+      responses:
+        "200":
+          description: Peer events
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DomainEventResponse"
+
 # =========================================================================
 # Components
 # =========================================================================
@@ -276,6 +458,23 @@ components:
       schema:
         type: string
         format: uuid
+    eventID:
+      name: eventID
+      in: path
+      required: true
+      description: UUID of the event
+      schema:
+        type: string
+        format: uuid
+    maxDepth:
+      name: maxDepth
+      in: query
+      required: false
+      description: Maximum traversal depth (default 3)
+      schema:
+        type: integer
+        default: 3
+        minimum: 1
 
   # --- Reusable Responses -----------------------------------------------
   responses:
@@ -524,3 +723,36 @@ components:
         min_occurrences:
           type: integer
           example: 2
+
+    IngestEventRequest:
+      type: object
+      required: [event_type]
+      properties:
+        event_type:
+          type: string
+          example: "cpu_spike"
+        event_domain:
+          type: string
+          example: "infrastructure"
+        properties:
+          type: object
+          additionalProperties: true
+          example: {"severity": "high", "host": "srv-01"}
+
+    DomainEventResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        event_type:
+          type: string
+        event_domain:
+          type: string
+        properties:
+          type: object
+          additionalProperties: true
+        timestamp:
+          type: string
+          format: date-time
+          example: "2026-02-10T14:30:00Z"

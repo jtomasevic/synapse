@@ -108,3 +108,19 @@ type GetCompositionResponse struct {
 	RequiredPatterns      []CompositionRequiredPatternDTO `json:"required_patterns"`
 	CreatedAt             string                          `json:"created_at"`
 }
+
+// --- Event ---
+
+type IngestEventRequest struct {
+	EventType   string         `json:"event_type"`
+	EventDomain string         `json:"event_domain"`
+	Properties  map[string]any `json:"properties,omitempty"`
+}
+
+type DomainEventResponse struct {
+	ID          string         `json:"id"`
+	EventType   string         `json:"event_type"`
+	EventDomain string         `json:"event_domain"`
+	Properties  map[string]any `json:"properties,omitempty"`
+	Timestamp   string         `json:"timestamp"`
+}

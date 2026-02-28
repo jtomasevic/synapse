@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jtomasevic/synapse/pkg/service/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -369,6 +370,69 @@ func TestCompositionsToResponse_Nil(t *testing.T) {
 
 func TestCompositionsToResponse_Empty(t *testing.T) {
 	resp := CompositionsToResponse([]models.CompositionSpec{})
+	require.NotNil(t, resp)
+	assert.Empty(t, resp)
+}
+
+// =========================================================================
+// DomainEvent mappings
+// =========================================================================
+
+func TestDomainEventFromRequest(t *testing.T) {
+	req := IngestEventRequest{
+		EventType:   "cpu_spike",
+		EventDomain: "infrastructure",
+		Properties:  map[string]any{"host": "srv-01"},
+	}
+	event := DomainEventFromRequest(req)
+	assert.Equal(t, "cpu_spike", event.EventType)
+	assert.Equal(t, "infrastructure", event.EventDomain)
+	assert.Equal(t, map[string]any{"host": "srv-01"}, event.Properties)
+}
+
+func TestDomainEventFromRequest_Empty(t *testing.T) {
+	req := IngestEventRequest{}
+	event := DomainEventFromRequest(req)
+	assert.Equal(t, "", event.EventType)
+	assert.Nil(t, event.Properties)
+}
+
+func TestDomainEventToResponse(t *testing.T) {
+	ts := time.Date(2026, 2, 10, 14, 30, 0, 0, time.UTC)
+	event := models.DomainEvent{
+		ID:          uuid.MustParse("aaaa0000-0000-0000-0000-000000000001"),
+		EventType:   "cpu_spike",
+		EventDomain: "infra",
+		Properties:  map[string]any{"host": "srv-01"},
+		Timestamp:   ts,
+	}
+	resp := DomainEventToResponse(event)
+	assert.Equal(t, "aaaa0000-0000-0000-0000-000000000001", resp.ID)
+	assert.Equal(t, "cpu_spike", resp.EventType)
+	assert.Equal(t, "infra", resp.EventDomain)
+	assert.Equal(t, map[string]any{"host": "srv-01"}, resp.Properties)
+	assert.Equal(t, "2026-02-10T14:30:00Z", resp.Timestamp)
+}
+
+func TestDomainEventsToResponse_Multiple(t *testing.T) {
+	ts := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	events := []models.DomainEvent{
+		{ID: uuid.New(), EventType: "a", Timestamp: ts},
+		{ID: uuid.New(), EventType: "b", Timestamp: ts},
+	}
+	resp := DomainEventsToResponse(events)
+	require.Len(t, resp, 2)
+	assert.Equal(t, "a", resp[0].EventType)
+	assert.Equal(t, "b", resp[1].EventType)
+}
+
+func TestDomainEventsToResponse_Nil(t *testing.T) {
+	resp := DomainEventsToResponse(nil)
+	assert.Nil(t, resp)
+}
+
+func TestDomainEventsToResponse_Empty(t *testing.T) {
+	resp := DomainEventsToResponse([]models.DomainEvent{})
 	require.NotNil(t, resp)
 	assert.Empty(t, resp)
 }

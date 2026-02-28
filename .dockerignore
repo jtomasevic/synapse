@@ -1,0 +1,14 @@
+.git
+.gitignore
+.cursor
+.env
+.synapse-api.*
+synapse-api
+*.test
+*.out
+coverage/
+coverage.*
+docs/
+examples/
+README.md
+LICENSE
