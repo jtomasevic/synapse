@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jtomasevic/synapse/pkg/service"
 	"github.com/jtomasevic/synapse/pkg/service/models"
@@ -1216,63 +1215,12 @@ func TestAddRule_SyncsToRuntime_Integration(t *testing.T) {
 	assert.NotEmpty(t, e1)
 }
 
-// =========================================================================
-// AddEvent — raw graph node insertion (no rule/pattern processing)
-// =========================================================================
-
-func TestAddEvent_Integration(t *testing.T) {
-	pool := getTestPool(t)
-	svc, synapseID := newService(t, pool, "add-event-synapse")
-	ctx := context.Background()
-
-	// Add a raw event.
-	id1, err := svc.AddEvent(ctx, synapseID, models.DomainEvent{
-		EventType:   "cpu_spike",
-		EventDomain: "infra",
-		Properties:  map[string]any{"host": "web-01"},
-	})
-	require.NoError(t, err)
-	assert.NotEmpty(t, id1)
-
-	_, parseErr := uuid.Parse(id1)
-	require.NoError(t, parseErr, "returned id should be a valid UUID")
-
-	// Add a second event of the same type.
-	id2, err := svc.AddEvent(ctx, synapseID, models.DomainEvent{
-		EventType:   "cpu_spike",
-		EventDomain: "infra",
-		Properties:  map[string]any{"host": "web-02"},
-	})
-	require.NoError(t, err)
-	assert.NotEmpty(t, id2)
-	assert.NotEqual(t, id1, id2)
-
-	// Verify graph queryable: Peers should return the other event.
-	peers, err := svc.Peers(ctx, synapseID, id1)
-	require.NoError(t, err)
-	require.Len(t, peers, 1)
-	assert.Equal(t, id2, peers[0].ID.String())
-}
-
-func TestAddEvent_NilProperties_Integration(t *testing.T) {
-	pool := getTestPool(t)
-	svc, synapseID := newService(t, pool, "add-event-nil-synapse")
-	ctx := context.Background()
-
-	id, err := svc.AddEvent(ctx, synapseID, models.DomainEvent{
-		EventType:   "simple",
-		EventDomain: "test",
-	})
-	require.NoError(t, err)
-	assert.NotEmpty(t, id)
-}
-
-func TestAddEvent_InvalidSynapse_Integration(t *testing.T) {
+func TestIngestEvent_InvalidSynapse_Integration(t *testing.T) {
 	pool := getTestPool(t)
 	svc := service.NewSynapseService(pool)
 	ctx := context.Background()
 
-	_, err := svc.AddEvent(ctx, "non-existent", models.DomainEvent{
+	_, err := svc.IngestEvent(ctx, "non-existent", models.DomainEvent{
 		EventType: "x",
 	})
 	require.Error(t, err)

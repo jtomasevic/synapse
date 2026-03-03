@@ -42,12 +42,6 @@ type SynapseService interface {
 	GetCompositionPattern(ctx context.Context, compositionID string) (models.CompositionSpec, error)
 	GetSynapsePattternCompositions(ctx context.Context, synapseID string) ([]models.CompositionSpec, error)
 
-	// --- Event graph (PG write → in-memory sync) ---
-
-	// AddEvent adds a raw event node to the synapse's event graph. The event
-	// is persisted to PG and added to the in-memory network, but NO rule
-	// evaluation or pattern matching is triggered. Returns the generated event ID.
-	AddEvent(ctx context.Context, synapseID string, event models.DomainEvent) (string, error)
 
 	// IngestEvent adds an event to the synapse. The event is persisted to PG,
 	// then processed by the in-memory runtime (rules fire, derived events

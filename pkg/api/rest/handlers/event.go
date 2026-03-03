@@ -8,7 +8,6 @@ import (
 // EventRoutes returns the route table for event ingestion and graph queries.
 func (h *Handlers) EventRoutes() []Route {
 	return []Route{
-		{"POST /synapses/{synapseID}/graph/events", h.AddEvent},
 		{"POST /synapses/{synapseID}/events", h.IngestEvent},
 		{"GET /synapses/{synapseID}/events/{eventID}/children", h.GetChildren},
 		{"GET /synapses/{synapseID}/events/{eventID}/parents", h.GetParents},
@@ -18,30 +17,6 @@ func (h *Handlers) EventRoutes() []Route {
 		{"GET /synapses/{synapseID}/events/{eventID}/cousins", h.GetCousins},
 		{"GET /synapses/{synapseID}/events/{eventID}/peers", h.GetPeers},
 	}
-}
-
-// AddEvent handles POST /synapses/{synapseID}/graph/events
-// It adds a raw event node to the graph without triggering rules or patterns.
-func (h *Handlers) AddEvent(w http.ResponseWriter, r *http.Request) {
-	synapseID := r.PathValue("synapseID")
-
-	var req IngestEventRequest
-	if !decodeJSON(w, r, &req) {
-		return
-	}
-	if req.EventType == "" {
-		writeError(w, http.StatusBadRequest, "event_type is required")
-		return
-	}
-
-	event := DomainEventFromRequest(req)
-	id, err := h.Svc.AddEvent(r.Context(), synapseID, event)
-	if err != nil {
-		writeServiceError(w, err)
-		return
-	}
-
-	writeJSON(w, http.StatusCreated, IDResponse{ID: id})
 }
 
 // IngestEvent handles POST /synapses/{synapseID}/events
