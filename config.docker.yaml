@@ -16,3 +16,6 @@ database:
   password: "synapse"
   dbname: "synapse"
   sslmode: "disable"
+
+nats:
+  url: "nats://nats:4222"

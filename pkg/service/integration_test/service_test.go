@@ -87,7 +87,7 @@ func cleanupSynapse(t *testing.T, pool *pgxpool.Pool, synapseID string) {
 func newService(t *testing.T, pool *pgxpool.Pool, name string) (service.SynapseService, string) {
 	t.Helper()
 	ctx := context.Background()
-	svc := service.NewSynapseService(pool)
+	svc := service.NewSynapseService(pool, nil)
 
 	id, err := svc.RegisterSynapse(ctx, name)
 	require.NoError(t, err)
@@ -102,7 +102,7 @@ func newService(t *testing.T, pool *pgxpool.Pool, name string) (service.SynapseS
 func TestRegisterSynapse_Integration(t *testing.T) {
 	pool := getTestPool(t)
 	q := repository.New(pool)
-	svc := service.NewSynapseService(pool)
+	svc := service.NewSynapseService(pool, nil)
 	ctx := context.Background()
 
 	id, err := svc.RegisterSynapse(ctx, "integration-test-synapse")
@@ -129,7 +129,7 @@ func TestRegisterSynapse_Integration(t *testing.T) {
 func TestRegisterSynapse_UniqueIDs_Integration(t *testing.T) {
 	pool := getTestPool(t)
 	q := repository.New(pool)
-	svc := service.NewSynapseService(pool)
+	svc := service.NewSynapseService(pool, nil)
 	ctx := context.Background()
 
 	id1, err := svc.RegisterSynapse(ctx, "synapse-a")
@@ -153,7 +153,7 @@ func TestRegisterSynapse_UniqueIDs_Integration(t *testing.T) {
 
 func TestRegisterSynapse_DescriptionPreserved_Integration(t *testing.T) {
 	pool := getTestPool(t)
-	svc := service.NewSynapseService(pool)
+	svc := service.NewSynapseService(pool, nil)
 	q := repository.New(pool)
 	ctx := context.Background()
 
@@ -536,7 +536,7 @@ func TestGetSynapse_Integration(t *testing.T) {
 
 func TestGetSynapse_NotFound_Integration(t *testing.T) {
 	pool := getTestPool(t)
-	svc := service.NewSynapseService(pool)
+	svc := service.NewSynapseService(pool, nil)
 	ctx := context.Background()
 
 	_, err := svc.GetSynapse(ctx, "nonexistent-synapse-id")
@@ -550,7 +550,7 @@ func TestGetSynapse_NotFound_Integration(t *testing.T) {
 
 func TestGetRule_NotFound_Integration(t *testing.T) {
 	pool := getTestPool(t)
-	svc := service.NewSynapseService(pool)
+	svc := service.NewSynapseService(pool, nil)
 	ctx := context.Background()
 
 	_, err := svc.GetRule(ctx, "nonexistent-rule-id")
@@ -589,7 +589,7 @@ func TestGetPattern_Integration(t *testing.T) {
 
 func TestGetPattern_NotFound_Integration(t *testing.T) {
 	pool := getTestPool(t)
-	svc := service.NewSynapseService(pool)
+	svc := service.NewSynapseService(pool, nil)
 	ctx := context.Background()
 
 	_, err := svc.GetPattern(ctx, "nonexistent-pattern-id")
@@ -666,7 +666,7 @@ func TestGetCompositionPattern_NoPatterns_Integration(t *testing.T) {
 
 func TestGetCompositionPattern_NotFound_Integration(t *testing.T) {
 	pool := getTestPool(t)
-	svc := service.NewSynapseService(pool)
+	svc := service.NewSynapseService(pool, nil)
 	ctx := context.Background()
 
 	_, err := svc.GetCompositionPattern(ctx, "nonexistent-comp-id")
@@ -1104,7 +1104,7 @@ func TestRuntimeLoadFromDB_Integration(t *testing.T) {
 	ctx := context.Background()
 
 	// Phase 1: Create a synapse with events using one service instance.
-	svc1 := service.NewSynapseService(pool)
+	svc1 := service.NewSynapseService(pool, nil)
 	synapseID, err := svc1.RegisterSynapse(ctx, "runtime-reload-synapse")
 	require.NoError(t, err)
 	t.Cleanup(func() { cleanupSynapse(t, pool, synapseID) })
@@ -1123,7 +1123,7 @@ func TestRuntimeLoadFromDB_Integration(t *testing.T) {
 
 	// Phase 2: Create a FRESH service (empty runtimeManager). This forces
 	// getOrLoad to hydrate the runtime from the database.
-	svc2 := service.NewSynapseService(pool)
+	svc2 := service.NewSynapseService(pool, nil)
 
 	// The events should be loadable from DB into the fresh runtime.
 	children, err := svc2.Children(ctx, synapseID, e1)
@@ -1147,7 +1147,7 @@ func TestRuntimeLoadWithRulesAndPatterns_Integration(t *testing.T) {
 
 	// Phase 1: Create synapse, add a rule (no condition / no event-type bindings
 	// so it won't fire during ingestion) and a pattern config.
-	svc1 := service.NewSynapseService(pool)
+	svc1 := service.NewSynapseService(pool, nil)
 	synapseID, err := svc1.RegisterSynapse(ctx, "runtime-rules-reload")
 	require.NoError(t, err)
 	t.Cleanup(func() { cleanupSynapse(t, pool, synapseID) })
@@ -1168,7 +1168,7 @@ func TestRuntimeLoadWithRulesAndPatterns_Integration(t *testing.T) {
 
 	// Phase 2: Fresh service instance forces full DB load including rules
 	// and pattern configs.
-	svc2 := service.NewSynapseService(pool)
+	svc2 := service.NewSynapseService(pool, nil)
 
 	// Verify runtime hydration succeeded by ingesting an event.
 	e1, err := svc2.IngestEvent(ctx, synapseID, models.DomainEvent{
@@ -1217,7 +1217,7 @@ func TestAddRule_SyncsToRuntime_Integration(t *testing.T) {
 
 func TestIngestEvent_InvalidSynapse_Integration(t *testing.T) {
 	pool := getTestPool(t)
-	svc := service.NewSynapseService(pool)
+	svc := service.NewSynapseService(pool, nil)
 	ctx := context.Background()
 
 	_, err := svc.IngestEvent(ctx, "non-existent", models.DomainEvent{

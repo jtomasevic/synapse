@@ -47,6 +47,11 @@ func NewDeriveEventRule(
 }
 
 func (r *DeriveEventRule) Process(event Event) (bool, []Event, error) {
+	// A rule with no condition (or nil) always fires for its bound event types.
+	if r.Condition == nil || r.Condition.IsEmpty() {
+		return true, nil, nil
+	}
+
 	expression, err := r.conditionCompiler.Compile(r.Condition, &event)
 	if err != nil {
 		return false, nil, err
@@ -56,7 +61,7 @@ func (r *DeriveEventRule) Process(event Event) (bool, []Event, error) {
 		return false, nil, err
 	}
 	if !ok {
-		return false, nil, ErrNotSatisfied // <-- important change
+		return false, nil, ErrNotSatisfied
 	}
 	return ok, events, nil
 }

@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/nats-io/nats.go"
+
 	en "github.com/jtomasevic/synapse/pkg/event_network"
 	"github.com/jtomasevic/synapse/pkg/storage/repository"
 )
@@ -21,11 +23,13 @@ import (
 type runtimeManager struct {
 	mu       sync.RWMutex
 	runtimes map[string]*en.SynapseRuntime
+	natsConn *nats.Conn // nil when NATS is not configured
 }
 
-func newRuntimeManager() *runtimeManager {
+func newRuntimeManager(nc *nats.Conn) *runtimeManager {
 	return &runtimeManager{
 		runtimes: make(map[string]*en.SynapseRuntime),
+		natsConn: nc,
 	}
 }
 
@@ -103,18 +107,32 @@ func (rm *runtimeManager) loadFromDB(ctx context.Context, q repository.Querier, 
 		return nil, fmt.Errorf("load patterns for synapse %s: %w", synapseID, err)
 	}
 
+	// Build a NATSPublisher if a NATS connection is available.
+	var pub *NATSPublisher
+	if rm.natsConn != nil {
+		pub = NewNATSPublisher(rm.natsConn, synapseID)
+	}
+
 	patternConfigs := make([]en.PatternConfig, 0, len(dbPatterns))
 	for _, p := range dbPatterns {
 		spec := buildWatchSpec(p.DerivedTypes, p.Domains)
-		patternConfigs = append(patternConfigs, en.PatternConfig{
+		cfg := en.PatternConfig{
 			Depth:    int(p.Depth),
 			MinCount: int(p.MinCount),
 			Spec:     spec,
-		})
+		}
+		if pub != nil {
+			cfg.PatternListener = pub
+		}
+		patternConfigs = append(patternConfigs, cfg)
 	}
 
 	// --- Build runtime ---
 	rt := en.NewSynapseWithNetwork(net, patternConfigs)
+
+	if pub != nil {
+		rt.AddConditionListener(pub)
+	}
 
 	// --- Load and register rules ---
 	dbRules, err := q.ListRules(ctx, synapseID)

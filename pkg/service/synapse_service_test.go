@@ -287,7 +287,7 @@ func TestRepoRuleToDomain_NilTemplateProps(t *testing.T) {
 // =========================================================================
 
 func TestRuntimeManager_PutAndGet(t *testing.T) {
-	rm := newRuntimeManager()
+	rm := newRuntimeManager(nil)
 	rt := en.NewSynapse(nil)
 
 	assert.Nil(t, rm.get("syn-1"))
@@ -297,7 +297,7 @@ func TestRuntimeManager_PutAndGet(t *testing.T) {
 }
 
 func TestRuntimeManager_GetMiss(t *testing.T) {
-	rm := newRuntimeManager()
+	rm := newRuntimeManager(nil)
 	assert.Nil(t, rm.get("nonexistent"))
 }
 
@@ -323,7 +323,7 @@ func newMockService(mq *mockQuerier) *synapseService {
 	return &synapseService{
 		pool:     nil, // transactional methods need a pool — tested separately
 		q:        mq,
-		runtimes: newRuntimeManager(),
+		runtimes: newRuntimeManager(nil),
 	}
 }
 

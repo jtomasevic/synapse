@@ -18,6 +18,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/nats-io/nats.go"
+
 	en "github.com/jtomasevic/synapse/pkg/event_network"
 	"github.com/jtomasevic/synapse/pkg/service/models"
 	"github.com/jtomasevic/synapse/pkg/storage/repository"
@@ -68,14 +70,17 @@ type synapseService struct {
 	pool     *pgxpool.Pool
 	q        repository.Querier
 	runtimes *runtimeManager
+	natsConn *nats.Conn
 }
 
 // NewSynapseService returns a ready-to-use SynapseService.
-func NewSynapseService(pool *pgxpool.Pool) SynapseService {
+// The nats.Conn parameter is optional — pass nil to disable NATS publishing.
+func NewSynapseService(pool *pgxpool.Pool, nc *nats.Conn) SynapseService {
 	return &synapseService{
 		pool:     pool,
 		q:        repository.New(pool),
-		runtimes: newRuntimeManager(),
+		runtimes: newRuntimeManager(nc),
+		natsConn: nc,
 	}
 }
 
@@ -108,6 +113,9 @@ func (s *synapseService) RegisterSynapse(ctx context.Context, name string) (stri
 	// Create an empty runtime for this new synapse.
 	net := newPersistentNetwork(s.q, id)
 	rt := en.NewSynapseWithNetwork(net, nil)
+	if s.natsConn != nil {
+		rt.AddConditionListener(NewNATSPublisher(s.natsConn, id))
+	}
 	s.runtimes.put(id, rt)
 
 	return id, nil

@@ -4,7 +4,26 @@ info:
   description: |
     REST interface for the Synapse service – manages synapses, rules,
     pattern watchers, and composition specs.
-  version: "1.1.0"
+
+    ## Real-time Notifications (NATS)
+
+    When events are ingested, the service publishes notifications to NATS
+    whenever rules fire, patterns repeat, or compositions are recognized.
+
+    **NATS subjects:**
+    - `synapse.{synapseID}.condition.satisfied` — a rule condition was met
+    - `synapse.{synapseID}.pattern.recognized` — a repeated pattern detected
+    - `synapse.{synapseID}.composition.recognized` — a pattern composition detected
+
+    **Go client SDK:** `github.com/jtomasevic/synapse/pkg/client`
+
+    ```go
+    c, _ := client.New("nats://localhost:4222")
+    c.OnCondition(synapseID, func(e client.ConditionEvent) { ... })
+    c.OnPattern(synapseID, func(e client.PatternEvent) { ... })
+    c.OnComposition(synapseID, func(e client.CompositionEvent) { ... })
+    ```
+  version: "1.2.0"
   contact:
     name: Synapse
     url: https://github.com/jtomasevic/synapse
@@ -727,3 +746,102 @@ components:
           type: string
           format: date-time
           example: "2026-02-10T14:30:00Z"
+
+    # --- NATS notification schemas (for documentation) ---
+
+    ConditionNotification:
+      type: object
+      description: Published to synapse.{id}.condition.satisfied
+      properties:
+        type:
+          type: string
+          example: "condition_satisfied"
+        synapse_id:
+          type: string
+          format: uuid
+        timestamp:
+          type: string
+          format: date-time
+        rule_id:
+          type: string
+        anchor_event:
+          type: object
+          properties:
+            id:
+              type: string
+              format: uuid
+            event_type:
+              type: string
+            domain:
+              type: string
+        derived_event:
+          type: object
+          properties:
+            id:
+              type: string
+              format: uuid
+            event_type:
+              type: string
+            domain:
+              type: string
+        contributor_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+
+    PatternNotification:
+      type: object
+      description: Published to synapse.{id}.pattern.recognized
+      properties:
+        type:
+          type: string
+          example: "pattern_recognized"
+        synapse_id:
+          type: string
+          format: uuid
+        timestamp:
+          type: string
+          format: date-time
+        occurrence:
+          type: integer
+          example: 3
+        derived_event_id:
+          type: string
+          format: uuid
+        rule_id:
+          type: string
+        contributor_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        derived_type:
+          type: string
+        derived_domain:
+          type: string
+        depth:
+          type: integer
+
+    CompositionNotification:
+      type: object
+      description: Published to synapse.{id}.composition.recognized
+      properties:
+        type:
+          type: string
+          example: "composition_recognized"
+        synapse_id:
+          type: string
+          format: uuid
+        timestamp:
+          type: string
+          format: date-time
+        composition_id:
+          type: string
+          format: uuid
+        derived_event_id:
+          type: string
+          format: uuid
+        pattern_count:
+          type: integer
+          example: 2

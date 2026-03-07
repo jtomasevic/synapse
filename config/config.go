@@ -22,6 +22,7 @@ import (
 type Config struct {
 	Server   ServerConfig   `yaml:"server"`
 	Database DatabaseConfig `yaml:"database"`
+	NATS     NATSConfig     `yaml:"nats"`
 }
 
 // ServerConfig holds HTTP server settings.
@@ -37,6 +38,11 @@ type DatabaseConfig struct {
 	Password string `yaml:"password"`
 	DBName   string `yaml:"dbname"`
 	SSLMode  string `yaml:"sslmode"`
+}
+
+// NATSConfig holds NATS connection settings.
+type NATSConfig struct {
+	URL string `yaml:"url"`
 }
 
 // DSN builds a PostgreSQL connection string from the individual fields.
@@ -72,6 +78,7 @@ func Load(path string) (Config, error) {
 //	SYNAPSE_DB_PASSWORD → Database.Password
 //	SYNAPSE_DB_NAME     → Database.DBName
 //	SYNAPSE_DB_SSLMODE  → Database.SSLMode
+//	SYNAPSE_NATS_URL    → NATS.URL
 func (c *Config) ApplyEnv() {
 	if v := os.Getenv("SYNAPSE_ADDR"); v != "" {
 		c.Server.Addr = v
@@ -95,5 +102,8 @@ func (c *Config) ApplyEnv() {
 	}
 	if v := os.Getenv("SYNAPSE_DB_SSLMODE"); v != "" {
 		c.Database.SSLMode = v
+	}
+	if v := os.Getenv("SYNAPSE_NATS_URL"); v != "" {
+		c.NATS.URL = v
 	}
 }
