@@ -8,10 +8,7 @@ import (
 )
 
 const (
-	// Layer 3 derived
-	CrisisProtocolActivated = "crisis_protocol_activated"
-
-	// AI consumer output (derived via a Rule)
+	// AI consumer output (derived via a Rule reacting to PatternComposition)
 	AIIncidentBrief = "ai_incident_brief"
 
 	// domains
@@ -25,22 +22,23 @@ const (
 	// events: AnimalObservation
 	ZebrasMigration     = "zebras_migration"
 	UnusualBirdBehavior = "unusual_bird_behavior"
-	RawAnimalBehavior   = "raw_animal_behavior"
 	// derive event
 	MultipleAnimalUnexpectedBehavior = "multiple_animal_unexpected_behavior"
 
-	// cross domain derived event
+	// cross domain derived event (produced by PatternComposition, not a manual rule)
 	PotentialNaturalCatastrophic = "potential_natural_catastrophic"
 )
 
 /*
-Local “AI consumer” rule
+Local "AI consumer" rule
 
-Reads Synapse outputs (derived CrisisProtocolActivated), inspects the derivation graph,
-and emits a deterministic incident brief JSON.
+Reacts to the composition-derived PotentialNaturalCatastrophic event.
+The fact that this event exists means Synapse's PatternComposition engine
+confirmed that BOTH domain patterns (tremor bursts + animal anomalies)
+were repeatedly observed within the configured time window.
 
-This keeps the full “Layer 0 -> Synapse (3+ derived layers) -> AI consumer reading Synapse outputs” story,
-while remaining fully local and shareable (no API keys, no external services).
+The consumer extracts evidence from the derivation graph and emits a
+deterministic incident brief JSON.
 */
 
 type AIIncidentBriefRule struct {
@@ -63,83 +61,45 @@ func (r *AIIncidentBriefRule) GetActionTemplate() EventTemplate {
 }
 
 type IncidentBrief struct {
-	Severity           string         `json:"severity"`
-	Confidence         float64        `json:"confidence"`
-	Summary            string         `json:"summary"`
-	LikelyCauses       []string       `json:"likely_causes"`
-	RecommendedActions []string       `json:"recommended_actions"`
-	EvidenceCounts     map[string]int `json:"evidence_counts"`
-	SignalsSample      []string       `json:"signals_sample"`
-	GeneratedAt        string         `json:"generated_at"`
-	Engine             string         `json:"engine"`
+	Severity           string   `json:"severity"`
+	Confidence         float64  `json:"confidence"`
+	Summary            string   `json:"summary"`
+	LikelyCauses       []string `json:"likely_causes"`
+	RecommendedActions []string `json:"recommended_actions"`
+	SignalsSample      []string `json:"signals_sample"`
+	GeneratedAt        string   `json:"generated_at"`
+	Engine             string   `json:"engine"`
 }
 
 func (r *AIIncidentBriefRule) Process(event Event) (bool, []Event, error) {
-	if event.EventType != CrisisProtocolActivated || r.net == nil {
+	if event.EventType != PotentialNaturalCatastrophic || r.net == nil {
 		return false, nil, ErrNotSatisfied
 	}
 
+	// The PatternComposition engine already confirmed that both domain patterns
+	// (tremor bursts + animal anomalies) co-occurred and repeated above threshold.
+	// High confidence by construction.
 	evidence := r.collectEvidence(event.ID, 10)
 
-	descAll, _ := r.net.Descendants(event.ID, 6)
-	counts := map[EventType]int{
-		MinorTremors:                     0,
-		UnusualBirdBehavior:              0,
-		ZebrasMigration:                  0,
-		HighFrequencyOfMinorTremors:      0,
-		MultipleAnimalUnexpectedBehavior: 0,
-		PotentialNaturalCatastrophic:     0,
-	}
-	for _, d := range descAll {
-		if _, ok := counts[d.EventType]; ok {
-			counts[d.EventType]++
-		}
-	}
-
-	// deterministic scoring ("ML-ish")
-	score := 0.0
-	score += 0.10 * float64(minInt(counts[HighFrequencyOfMinorTremors], 5))      // up to +0.5
-	score += 0.10 * float64(minInt(counts[MultipleAnimalUnexpectedBehavior], 5)) // up to +0.5
-	score += 0.20 * float64(minInt(counts[PotentialNaturalCatastrophic], 5))     // up to +1.0
-
-	conf := score / 2.0
-	if conf > 1.0 {
-		conf = 1.0
-	}
-
-	severity := "sev3"
-	switch {
-	case conf >= 0.75:
-		severity = "sev1"
-	case conf >= 0.45:
-		severity = "sev2"
-	}
-
 	brief := IncidentBrief{
-		Severity:   severity,
-		Confidence: round2(conf),
-		Summary: "Cross-domain weak signals stabilized into a repeatable catastrophic-risk motif " +
-			"(tremor bursts + animal anomalies). Crisis protocol triggered.",
+		Severity:   "sev1",
+		Confidence: 0.95,
+		Summary: "Cross-domain PatternComposition confirmed: repeated tremor bursts (geology) " +
+			"and repeated animal anomalies (observation) co-occurring within time window. " +
+			"Derived by Synapse PatternComposition engine.",
 		LikelyCauses: []string{
-			"microtremor burst near active fault line",
-			"precursor behavior changes correlated in time (birds / herd movement)",
+			"microtremor burst near active fault line (pattern repeated ≥ threshold)",
+			"precursor behavior changes correlated in time — birds / herd movement (pattern repeated ≥ threshold)",
+			"cross-domain composition of both patterns satisfied simultaneously",
 		},
 		RecommendedActions: []string{
 			"verify seismic station health and increase monitoring frequency",
 			"notify incident commander; activate comms draft and field checks",
 			"cross-check with independent sensors and geological advisories",
 		},
-		EvidenceCounts: map[string]int{
-			"minor_tremors": counts[MinorTremors],
-			"unusual_bird":  counts[UnusualBirdBehavior],
-			"zebras":        counts[ZebrasMigration],
-			"hf_tremors":    counts[HighFrequencyOfMinorTremors],
-			"animal_unexp":  counts[MultipleAnimalUnexpectedBehavior],
-			"catastrophic":  counts[PotentialNaturalCatastrophic],
-		},
 		SignalsSample: evidence,
-		GeneratedAt:   time.Now().UTC().Format(time.RFC3339),
-		Engine:        "local_ml_consumer_v1",
+		GeneratedAt:  time.Now().UTC().Format(time.RFC3339),
+		Engine:       "pattern_composition_consumer_v1",
 	}
 
 	b, _ := json.MarshalIndent(brief, "", "  ")
@@ -150,7 +110,7 @@ func (r *AIIncidentBriefRule) Process(event Event) (bool, []Event, error) {
 		EventDomain: NaturalDisasterWarningSystem,
 		EventProps: map[string]any{
 			"brief_json": out,
-			"source":     "local_ml_consumer_reading_synapse",
+			"source":     "local_ml_consumer_reading_synapse_composition",
 		},
 	}
 
@@ -193,15 +153,4 @@ func (r *AIIncidentBriefRule) collectEvidence(anchor EventID, max int) []string 
 		return []string{"No raw evidence extracted from graph."}
 	}
 	return evidence
-}
-
-func minInt(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-func round2(x float64) float64 {
-	return float64(int(x*100+0.5)) / 100
 }
