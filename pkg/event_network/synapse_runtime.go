@@ -8,17 +8,22 @@ import (
 )
 
 type SynapseRuntime struct {
-	Network        EventNetwork
-	EvalNetwork    EventNetwork
-	Memory         StructuralMemory
-	rulesByType    map[EventType][]Rule
-	PatternWatcher []PatternObserver
+	Network            EventNetwork
+	EvalNetwork        EventNetwork
+	Memory             StructuralMemory
+	rulesByType        map[EventType][]Rule
+	PatternWatcher     []PatternObserver
+	ConditionListeners []ConditionListener
 }
 
 func (s *SynapseRuntime) RegisterRule(eventType EventType, rule Rule) {
 	// IMPORTANT: bind rules to EvalNet so Expression evaluation benefits from caching
 	rule.BindNetwork(s.Network)
 	s.rulesByType[eventType] = append(s.rulesByType[eventType], rule)
+}
+
+func (s *SynapseRuntime) AddConditionListener(l ConditionListener) {
+	s.ConditionListeners = append(s.ConditionListeners, l)
 }
 
 func (s *SynapseRuntime) RegisterRuleForTypes(eventTypes []EventType, rule Rule) {
@@ -65,13 +70,22 @@ func (s *SynapseRuntime) Ingest(event Event) (EventID, error) {
 			}
 
 			derived, err := s.materializeDerived(cur, contributors, rule)
-
-			derivedEvents = append(derivedEvents, derived)
-			contributedEvents[derived.ID] = append(contributors, cur)
-
-			rulesId[derived.ID] = rule.GetID()
 			if err != nil {
 				return uuid.UUID{}, err
+			}
+
+			derivedEvents = append(derivedEvents, derived)
+			allContrib := append(contributors, cur)
+			contributedEvents[derived.ID] = allContrib
+			rulesId[derived.ID] = rule.GetID()
+
+			for _, cl := range s.ConditionListeners {
+				cl.OnConditionSatisfied(ConditionSatisfied{
+					RuleID:       rule.GetID(),
+					AnchorEvent:  cur,
+					Contributors: allContrib,
+					DerivedEvent: derived,
+				})
 			}
 			//s.lookForPatterns(buildMotifKey(derived, contributors, rule.GetID()))
 

@@ -34,6 +34,22 @@ services:
       retries: 15
       start_period: 5s
 
+  nats:
+    image: nats:2-alpine
+    container_name: synapse-nats
+    command: ["--jetstream", "--store_dir=/data", "--http_port=8222"]
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    volumes:
+      - synapse-natsdata:/data
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8222/healthz"]
+      interval: 2s
+      timeout: 3s
+      retries: 10
+      start_period: 3s
+
   api:
     build:
       context: .
@@ -44,6 +60,9 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      nats:
+        condition: service_healthy
 
 volumes:
   synapse-pgdata:
+  synapse-natsdata:

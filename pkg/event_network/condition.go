@@ -14,6 +14,11 @@ func NewCondition() *Condition {
 	return &Condition{}
 }
 
+// IsEmpty returns true when the condition has no tokens (no constraints).
+func (c *Condition) IsEmpty() bool {
+	return len(c.tokens) == 0
+}
+
 /*
 ========================
 Fluent DSL (mirrors Expression)

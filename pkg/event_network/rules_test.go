@@ -240,9 +240,10 @@ func TestDeriveEventRule_Process_WithNilCondition(t *testing.T) {
 	event, err := network.GetByID(eventID)
 	require.NoError(t, err)
 
-	// Should handle nil condition gracefully
-	_, _, err = rule.Process(event)
-	require.Error(t, err)
+	// A nil condition means "always match" — the rule fires unconditionally.
+	ok, _, err := rule.Process(event)
+	require.NoError(t, err)
+	require.True(t, ok)
 }
 
 func TestDeriveEventRule_EventTemplateProperties(t *testing.T) {
