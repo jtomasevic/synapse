@@ -2,35 +2,103 @@ package earthquake_early_warning
 
 import (
 	"fmt"
-	. "github.com/jtomasevic/synapse/pkg/event_network"
-	"github.com/stretchr/testify/require"
 	"math/rand"
 	"sort"
+	"sync"
 	"testing"
 	"time"
+
+	. "github.com/jtomasevic/synapse/pkg/event_network"
+	"github.com/stretchr/testify/require"
 )
 
 func Test_Dance_EarthquakeEarlyWarning_AI_Synapse_AI(t *testing.T) {
-	// --- Synapse runtime ---
-	syn := NewSynapse([]PatternConfig{
+
+	// =====================================================================
+	// 1. Pattern Composition — the heart of the example
+	//
+	// Instead of writing rules that manually count descendants, we let Synapse's
+	// PatternComposition engine detect that BOTH domain patterns
+	// (tremor bursts + animal anomalies) are repeating within a time window.
+	// When both are satisfied, Synapse derives PotentialNaturalCatastrophic.
+	// =====================================================================
+
+	compositionListener := &exampleCompositionListener{}
+
+	compositionSpec := PatternCompositionSpec{
+		RequiredPatterns: map[PatternIdentifier]struct{}{
+			{EventType: MultipleAnimalUnexpectedBehavior, EventDomain: AnimalObservation}: {},
+			{EventType: HighFrequencyOfMinorTremors, EventDomain: Geology}:                {},
+		},
+		TimeWindow: &TimeWindow{
+			Within:   8,
+			TimeUnit: Hour,
+		},
+		MinOccurrences: map[PatternIdentifier]int{
+			{EventType: MultipleAnimalUnexpectedBehavior, EventDomain: AnimalObservation}: 2,
+			{EventType: HighFrequencyOfMinorTremors, EventDomain: Geology}:                5,
+		},
+		DerivedEventTemplate: EventTemplate{
+			EventType:   PotentialNaturalCatastrophic,
+			EventDomain: NaturalDisasterWarningSystem,
+			EventProps: EventProps{
+				"composition_id": "cross-domain-natural-disaster",
+				"meaning":        "Both domain patterns (geology + animal observation) confirmed simultaneously.",
+			},
+		},
+		CompositionID: "cross-domain-natural-disaster",
+	}
+
+	compositeListener := NewCompositePatternListener(nil)
+	compositionWatcher := NewPatternCompositionWatcher(
+		compositionSpec,
+		nil, // Synapse wired below after construction
+		compositionListener,
+	)
+	compositeListener.AddCompositionWatcher(compositionWatcher)
+
+	// =====================================================================
+	// 2. Pattern Watchers — detect repetition of L1 derived motifs
+	//
+	// MinCount=3 means: after the same L1 derivation motif fires 3 times,
+	// the PatternWatcher emits a PatternMatch which flows to the
+	// CompositionWatcher above.
+	// =====================================================================
+
+	configs := []PatternConfig{
 		{
-			Depth:    4,
-			MinCount: 3,
+			Depth:           4,
+			MinCount:        3,
+			PatternListener: compositeListener,
 			Spec: WatchSpec{
 				DerivedTypes: map[EventType]struct{}{
 					MultipleAnimalUnexpectedBehavior: {},
-					HighFrequencyOfMinorTremors:      {},
-					PotentialNaturalCatastrophic:     {},
-					CrisisProtocolActivated:          {},
-					AIIncidentBrief:                  {},
 				},
 			},
 		},
-	})
+		{
+			Depth:           4,
+			MinCount:        3,
+			PatternListener: compositeListener,
+			Spec: WatchSpec{
+				DerivedTypes: map[EventType]struct{}{
+					HighFrequencyOfMinorTremors: {},
+				},
+			},
+		},
+	}
 
-	// --- Rules (ladder + one extra layer + local ML consumer rule) ---
+	syn := NewSynapse(configs)
+	compositionWatcher.Synapse = syn
 
-	// L1 (animal): ZebrasMigration or UnusualBirdBehavior => MultipleAnimalUnexpectedBehavior
+	// =====================================================================
+	// 3. L1 Rules — within-domain derivation (only 2 rules, no L2/L3 rules)
+	//
+	// These produce L1 derived events. The Pattern + Composition system above
+	// replaces what used to be manual L2 and L3 rules.
+	// =====================================================================
+
+	// L1 (animal): ZebrasMigration or UnusualBirdBehavior peers ⇒ MultipleAnimalUnexpectedBehavior
 	syn.RegisterRuleForTypes([]EventType{ZebrasMigration, UnusualBirdBehavior},
 		NewDeriveEventRule("r_animal_unexpected",
 			NewCondition().
@@ -43,56 +111,39 @@ func Test_Dance_EarthquakeEarlyWarning_AI_Synapse_AI(t *testing.T) {
 					Counter:    &Counter{HowMany: 1, HowManyOrMore: true},
 					TimeWindow: &TimeWindow{Within: 8, TimeUnit: Hour},
 				}),
-			getAnimalObservationDerivedEventTemplate(),
+			EventTemplate{
+				EventType:   MultipleAnimalUnexpectedBehavior,
+				EventDomain: AnimalObservation,
+			},
 		),
 	)
 
-	// L1 (geology): MinorTremors => HighFrequencyOfMinorTremors
+	// L1 (geology): MinorTremors peers ⇒ HighFrequencyOfMinorTremors
 	syn.RegisterRule(MinorTremors, NewDeriveEventRule("r_tremors_burst",
 		NewCondition().HasPeers(MinorTremors, Conditions{
 			Counter:    &Counter{HowMany: 5, HowManyOrMore: true},
 			TimeWindow: &TimeWindow{Within: 8, TimeUnit: Hour},
 		}),
-		getMinorTremorDerivedEventTemplate(),
-	))
-
-	// L2 (cross-domain): (HighFrequencyOfMinorTremors OR MultipleAnimalUnexpectedBehavior) peers => PotentialNaturalCatastrophic
-	syn.RegisterRuleForTypes([]EventType{HighFrequencyOfMinorTremors, MultipleAnimalUnexpectedBehavior},
-		NewDeriveEventRule("r_cross_domain_join",
-			NewCondition().
-				HasPeers(HighFrequencyOfMinorTremors, Conditions{
-					Counter:    &Counter{HowMany: 1, HowManyOrMore: true},
-					TimeWindow: &TimeWindow{Within: 8, TimeUnit: Hour},
-				}).
-				Or().
-				HasPeers(MultipleAnimalUnexpectedBehavior, Conditions{
-					Counter:    &Counter{HowMany: 1, HowManyOrMore: true},
-					TimeWindow: &TimeWindow{Within: 8, TimeUnit: Hour},
-				}),
-			getPotentialNaturalCatastrophicDerivedEventTemplate(),
-		),
-	)
-
-	// L3 (meta escalation): PotentialNaturalCatastrophic repeating => CrisisProtocolActivated
-	// Require 2 peers => implies >= 3 occurrences total (self + 2 peers).
-	syn.RegisterRule(PotentialNaturalCatastrophic, NewDeriveEventRule("r_crisis_protocol",
-		NewCondition().HasPeers(PotentialNaturalCatastrophic, Conditions{
-			Counter:    &Counter{HowMany: 2, HowManyOrMore: true},
-			TimeWindow: &TimeWindow{Within: 24, TimeUnit: Hour},
-		}),
 		EventTemplate{
-			EventType:   CrisisProtocolActivated,
-			EventDomain: NaturalDisasterWarningSystem,
-			EventProps: map[string]any{
-				"reason": "repeated_cross_domain_catastrophic_signals",
-			},
+			EventType:   HighFrequencyOfMinorTremors,
+			EventDomain: Geology,
 		},
 	))
 
-	// Local AI consumer: reads CrisisProtocolActivated and writes AIIncidentBrief
-	syn.RegisterRule(CrisisProtocolActivated, NewAIIncidentBriefRule("r_ai_incident_brief_local"))
+	// =====================================================================
+	// 4. AI Consumer — reads composition-derived output, emits incident brief
+	//
+	// When the composition derives PotentialNaturalCatastrophic, this rule fires
+	// and produces an AIIncidentBrief. No manual event counting needed — the
+	// composition already validated that both patterns are confirmed.
+	// =====================================================================
 
-	// --- Layer 0 (Local ML): TF-IDF + cosine classification -> ingest 320 events ---
+	syn.RegisterRule(PotentialNaturalCatastrophic,
+		NewAIIncidentBriefRule("r_ai_incident_brief_local"))
+
+	// =====================================================================
+	// 5. Layer 0 — Local ML: TF-IDF + cosine classification → 320 events
+	// =====================================================================
 
 	rawNotes := buildRawNotes_320()
 	prototypes := []string{
@@ -117,7 +168,7 @@ func Test_Dance_EarthquakeEarlyWarning_AI_Synapse_AI(t *testing.T) {
 		evt := Event{
 			EventType:   evtType,
 			EventDomain: evtDomain,
-			Timestamp:   start.Add(time.Duration(i) * time.Minute), // stays within ~5h20m
+			Timestamp:   start.Add(time.Duration(i) * time.Minute),
 			Properties: map[string]any{
 				"raw": note,
 				"sim": sim,
@@ -129,33 +180,88 @@ func Test_Dance_EarthquakeEarlyWarning_AI_Synapse_AI(t *testing.T) {
 		require.NoError(t, err)
 	}
 
+	// =====================================================================
+	// Assertions
+	// =====================================================================
+
 	net := syn.GetNetwork()
 
-	// --- Assertions: base volume ---
+	// --- Base volume ---
 	minorTremors, _ := net.GetByType(MinorTremors)
 	birds, _ := net.GetByType(UnusualBirdBehavior)
 	zebras, _ := net.GetByType(ZebrasMigration)
-	require.GreaterOrEqual(t, len(minorTremors)+len(birds)+len(zebras), 300)
+	require.GreaterOrEqual(t, len(minorTremors)+len(birds)+len(zebras), 300,
+		"should ingest at least 300 base events")
 
-	// --- Assertions: 3+ derivation layers happened ---
+	// --- L1 derivation: enough repetitions to trigger patterns ---
 	mAnimal, _ := net.GetByType(MultipleAnimalUnexpectedBehavior)
 	hTremors, _ := net.GetByType(HighFrequencyOfMinorTremors)
-	catastrophes, _ := net.GetByType(PotentialNaturalCatastrophic)
-	crisis, _ := net.GetByType(CrisisProtocolActivated)
-	briefs, _ := net.GetByType(AIIncidentBrief)
+	t.Logf("L1: %d animal anomalies, %d tremor bursts derived", len(mAnimal), len(hTremors))
+	require.GreaterOrEqual(t, len(mAnimal), 6,
+		"L1 animal anomalies should repeat enough for pattern recognition (MinCount=3, MinOccurrences=2)")
+	require.GreaterOrEqual(t, len(hTremors), 15,
+		"L1 tremor bursts should repeat enough for pattern recognition (MinCount=3, MinOccurrences=5)")
 
-	require.Equal(t, len(mAnimal), 40, "L1 animal derived should exist")
-	require.Equal(t, len(hTremors), 40, "L1 tremors derived should exist")
-	require.Equal(t, len(catastrophes), 40, "L2 cross-domain should repeat enough to trigger crisis")
-	require.GreaterOrEqual(t, len(crisis), 1, "L3 crisis protocol should exist")
-	require.GreaterOrEqual(t, len(briefs), 1, "local AI consumer should produce at least one incident brief")
+	// --- Pattern Composition fired ---
+	compositionMatches := compositionListener.All()
+	require.GreaterOrEqual(t, len(compositionMatches), 1,
+		"PatternComposition should fire when both domain patterns are recognized")
+
+	composition := compositionMatches[0]
+	require.Equal(t, PotentialNaturalCatastrophic, composition.DerivedEvent.EventType)
+	require.Len(t, composition.Patterns, 2, "composition should include both domain patterns")
+
+	patternTypes := make(map[EventType]bool)
+	for _, p := range composition.Patterns {
+		patternTypes[p.Key.DerivedType] = true
+	}
+	require.True(t, patternTypes[MultipleAnimalUnexpectedBehavior],
+		"composition should include animal anomaly pattern")
+	require.True(t, patternTypes[HighFrequencyOfMinorTremors],
+		"composition should include tremor burst pattern")
+
+	// --- Composition-derived event exists in the graph ---
+	catastrophes, _ := net.GetByType(PotentialNaturalCatastrophic)
+	require.GreaterOrEqual(t, len(catastrophes), 1,
+		"composition should derive PotentialNaturalCatastrophic into the graph")
+
+	// --- AI consumer produced incident brief ---
+	briefs, _ := net.GetByType(AIIncidentBrief)
+	require.GreaterOrEqual(t, len(briefs), 1,
+		"local AI consumer should produce at least one incident brief from composition output")
 
 	// --- Show the output ---
 	sort.Slice(briefs, func(i, j int) bool { return briefs[i].Timestamp.Before(briefs[j].Timestamp) })
 	last := briefs[len(briefs)-1]
 	briefJSON, _ := last.Properties["brief_json"].(string)
 
-	t.Logf("\n\n===== INCIDENT BRIEF (Local ML consumer reading Synapse outputs) =====\n%s\n", briefJSON)
+	t.Logf("\n\n===== INCIDENT BRIEF (AI consumer reading PatternComposition output) =====\n%s\n", briefJSON)
+
+	PrintEventGraph(syn.GetNetwork())
+}
+
+// =========================================================================
+// Helpers
+// =========================================================================
+
+// exampleCompositionListener captures PatternCompositionMatch callbacks.
+type exampleCompositionListener struct {
+	mu      sync.Mutex
+	matches []PatternCompositionMatch
+}
+
+func (l *exampleCompositionListener) OnCompositionRecognized(match PatternCompositionMatch) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.matches = append(l.matches, match)
+}
+
+func (l *exampleCompositionListener) All() []PatternCompositionMatch {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	out := make([]PatternCompositionMatch, len(l.matches))
+	copy(out, l.matches)
+	return out
 }
 
 func buildRawNotes_320() []string {
@@ -195,25 +301,4 @@ func buildRawNotes_320() []string {
 
 	rng.Shuffle(len(notes), func(i, j int) { notes[i], notes[j] = notes[j], notes[i] })
 	return notes
-}
-
-func getAnimalObservationDerivedEventTemplate() EventTemplate {
-	return EventTemplate{
-		EventType:   MultipleAnimalUnexpectedBehavior,
-		EventDomain: AnimalObservation,
-	}
-}
-
-func getPotentialNaturalCatastrophicDerivedEventTemplate() EventTemplate {
-	return EventTemplate{
-		EventType:   PotentialNaturalCatastrophic,
-		EventDomain: NaturalDisasterWarningSystem,
-	}
-}
-
-func getMinorTremorDerivedEventTemplate() EventTemplate {
-	return EventTemplate{
-		EventType:   HighFrequencyOfMinorTremors,
-		EventDomain: Geology,
-	}
 }

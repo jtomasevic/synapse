@@ -1,23 +1,23 @@
-# Earthquake Early Warning – Layered ML → Synapse → ML Demo (Go-only)
+# Earthquake Early Warning — Patterns, Composition & ML Demo (Go-only)
 
 This example demonstrates a **layered architecture** where:
 
 1) **Layer 0 (Local ML Producer)** turns raw, noisy text into typed events  
-2) **Synapse (Derivation Engine)** stabilizes meaning across time + domains through multi-layer derived events  
-3) **Layer 2 (Local ML Consumer)** reads Synapse-derived signals and produces a machine-readable **incident brief**
+2) **Synapse (Pattern & Composition Engine)** stabilizes meaning using within-domain rules, pattern repetition detection, and cross-domain composition  
+3) **AI Consumer** reads Synapse composition-derived signals and produces a machine-readable **incident brief**
 
 Everything is **Go-only**, deterministic, and requires **no API keys**, no external services, and no storage.
 
 ---
 
-## Story: “Earthquake Early Warning from weak signals”
+## Story: "Earthquake Early Warning from weak signals"
 
 We ingest hundreds of weak, ambiguous observations from two domains:
 
 - **Geology**: micro-tremor sensor notes (often noisy)
 - **Animal Observation**: ranger notes about unusual bird behavior / zebra movement anomalies
 
-Individually, these are weak signals. The demo shows how Synapse turns them into **stable, actionable meaning** using multi-step derivation logic.
+Individually, these are weak signals. The demo shows how Synapse turns them into **stable, actionable meaning** using patterns and cross-domain composition.
 
 ---
 
@@ -38,73 +38,77 @@ Each ingested event includes:
 - `sim`: similarity score to the prototype class
 - `ml`: `"tfidf+cosine"`
 
-This layer exists to show: **ML produces signals**, Synapse doesn’t need raw text parsing rules.
-
 ---
 
-### Synapse — Semantic Stabilization / Derivation Engine
-**Goal:** derive higher-level meaning using temporal + cross-domain rules.
+### Synapse — Pattern Recognition & Cross-Domain Composition
 
-Synapse ingests base events and applies rules that produce a **multi-layer derivation ladder**:
+**Goal:** derive higher-level meaning using temporal rules, pattern repetition, and cross-domain composition.
 
-#### Derived Layer 1 (within domain)
+#### L1 Rules (within-domain derivation)
 - From geology:
   - `high_frequency_of_minor_tremors`  
-    Trigger: many `minor_tremors` within a window
+    Rule: `minor_tremors` has 5+ peers within 8 hours
 - From animal observation:
   - `multiple_animal_unexpected_behavior`  
-    Trigger: repeated `unusual_bird_behavior` or `zebras_migration` within a window
+    Rule: `unusual_bird_behavior` or `zebras_migration` has peers within 8 hours
 
-#### Derived Layer 2 (cross-domain stabilization)
-- `potential_natural_catastrophic`  
-  Trigger: co-occurrence of derived L1 signals across domains
+#### Pattern Watchers (repetition detection)
+- Watch for `multiple_animal_unexpected_behavior` motif repeating ≥ 3 times
+- Watch for `high_frequency_of_minor_tremors` motif repeating ≥ 3 times
 
-#### Derived Layer 3 (meta escalation)
-- `crisis_protocol_activated`  
-  Trigger: repeated `potential_natural_catastrophic` within a broader window
+When a motif repeats enough, the PatternWatcher emits a `PatternMatch`.
 
-This ladder demonstrates that Synapse can **stabilize meaning**:
-- from noisy events
-- across time
-- across domains
-- and escalate when patterns repeat
+#### Pattern Composition (cross-domain trigger)
+- **`PatternCompositionSpec`** requires BOTH domain patterns to be recognized within an 8-hour window
+- When satisfied → derives `potential_natural_catastrophic`
+
+This replaces manual L2/L3 rules with the declarative composition system:
+- No hand-coded cross-domain join rules
+- No manual descendant traversal or event counting
+- The composition engine handles all of it
 
 ---
 
-### Layer 2 — Local ML Consumer (reads Synapse outputs)
-**Goal:** turn stabilized Synapse signals into an actionable artifact.
+### AI Consumer — reads composition output
 
-When Synapse derives `crisis_protocol_activated`, a consumer rule:
-- reads evidence from the derivation graph (children + descendants)
-- computes a deterministic severity/confidence score
-- emits a derived event:
-  - `ai_incident_brief` with `brief_json` (pretty-printed JSON)
-
-This layer proves: **Synapse outputs become inputs for the next “AI layer.”**
+When Synapse derives `potential_natural_catastrophic` (via composition), the AI consumer rule:
+- knows both domain patterns are confirmed (the composition guarantees it)
+- collects evidence from the derivation graph
+- emits `ai_incident_brief` with a deterministic JSON brief
 
 ---
 
 ## Event Flow Summary
 
+```
 Raw text notes (320)
-→ Local ML classify (TF-IDF + cosine)
-→ base events: tremors / birds / zebras
-→ Synapse derivations:
-   L1: tremor burst + animal anomaly
-→ L2: cross-domain catastrophic candidate
-→ L3: crisis protocol activation
-→ Local ML consumer:
-   incident brief JSON
+  → Local ML classify (TF-IDF + cosine)
+  → base events: tremors / birds / zebras
+
+  → L1 Rules: within-domain derivation
+      high_frequency_of_minor_tremors
+      multiple_animal_unexpected_behavior
+
+  → Pattern Watchers: detect motif repetition (MinCount=3)
+      PatternMatch(animal) + PatternMatch(tremors)
+
+  → Pattern Composition: cross-domain co-occurrence
+      → derives potential_natural_catastrophic
+
+  → AI Consumer: reads composition output
+      → ai_incident_brief JSON
+```
 
 ---
 
 ## Files
 
 - `example_test.go`
-  - sets up Synapse rules (L1 → L2 → L3)
-  - generates 320 raw notes
-  - runs Layer 0 local ML classification and ingests events
-  - asserts derived layers exist
+  - sets up PatternConfig watchers (animal + tremors)
+  - sets up PatternCompositionSpec (cross-domain trigger)
+  - registers L1 rules (only 2 rules!)
+  - generates 320 raw notes via Layer 0 ML classification
+  - asserts patterns are recognized and composition fires
   - prints the final incident brief JSON
 
 - `local_ml.go`
@@ -112,9 +116,9 @@ Raw text notes (320)
   - cosine similarity (sparse, normalized)
 
 - `ai_incident_brief_rule.go`
-  - local “AI consumer” rule that reacts to `crisis_protocol_activated`
-  - reads evidence from the event graph
+  - local "AI consumer" rule that reacts to `potential_natural_catastrophic`
   - emits `ai_incident_brief` with deterministic JSON
+  - no manual event counting — composition already validated the signal
 
 ---
 
@@ -123,51 +127,27 @@ Raw text notes (320)
 From the repo root:
 
 ```bash
-go test ./... -run Test_Dance_EarthquakeEarlyWarning_AI_Synapse_AI -v
-````
-
-You should see output similar to:
-
-* counts of derived events (implicit via assertions)
-* printed JSON:
-
-```json
-{
-  "severity": "sev2",
-  "confidence": 0.63,
-  "summary": "...",
-  "likely_causes": [...],
-  "recommended_actions": [...],
-  "evidence_counts": {...},
-  "signals_sample": [...],
-  "generated_at": "...",
-  "engine": "local_ml_consumer_v1"
-}
+go test ./examples/earthquake_early_warning/ -run Test_Dance_EarthquakeEarlyWarning_AI_Synapse_AI -v
 ```
 
 ---
 
 ## Why this design is interesting
 
-### 1) ML as a producer, not “the brain”
+### 1) Patterns replace manual counting
+Instead of writing rules that traverse the graph and count events by type,
+`PatternConfig` detects when a derivation motif repeats. The count threshold
+is declared, not coded.
 
-Layer 0 ML simply turns unstructured inputs into typed events. It doesn’t “own” the system.
+### 2) Composition replaces cross-domain join rules
+Instead of writing an L2 rule that checks for peers across domains,
+`PatternCompositionSpec` declares which patterns must co-occur. Synapse
+handles the temporal correlation automatically.
 
-### 2) Synapse as semantic stabilization
+### 3) ML as a producer, not "the brain"
+Layer 0 ML simply turns unstructured inputs into typed events. It doesn't "own" the system.
 
-Synapse provides:
-
-* temporal windows
-* cross-domain correlation
-* multi-step derivation
-* evidence lineage (graph)
-
-This is the key: stable meaning emerges from **composition**, not from any single model call.
-
-### 3) Downstream automation is clean
-
-The consumer doesn’t need raw notes and heuristics; it consumes derived meaning:
-
-* `crisis_protocol_activated`
-  …and can produce consistent artifacts.
-
+### 4) Downstream automation is clean
+The AI consumer doesn't need to count descendants or parse the graph structure.
+It receives `potential_natural_catastrophic` — which by definition means both
+patterns are confirmed — and produces a clean artifact.
