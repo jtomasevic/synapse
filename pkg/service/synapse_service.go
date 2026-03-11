@@ -16,11 +16,11 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nats-io/nats.go"
 
 	en "github.com/jtomasevic/synapse/pkg/event_network"
+	"github.com/jtomasevic/synapse/pkg/service/event_bus"
 	"github.com/jtomasevic/synapse/pkg/service/models"
 	"github.com/jtomasevic/synapse/pkg/storage/repository"
 )
@@ -114,7 +114,7 @@ func (s *synapseService) RegisterSynapse(ctx context.Context, name string) (stri
 	net := newPersistentNetwork(s.q, id)
 	rt := en.NewSynapseWithNetwork(net, nil)
 	if s.natsConn != nil {
-		rt.AddConditionListener(NewNATSPublisher(s.natsConn, id))
+		rt.AddConditionListener(event_bus.NewNATSPublisher(s.natsConn, id))
 	}
 	s.runtimes.put(id, rt)
 
@@ -139,33 +139,14 @@ func (s *synapseService) AddRule(ctx context.Context, synapseID string, rule mod
 
 	qtx := repository.New(tx)
 
-	condJSON := models.MapToRawJSON(rule.ConditionJSON)
-	if condJSON == nil {
-		condJSON = []byte(`{}`)
-	}
-	propsJSON := models.MapToRawJSON(rule.TemplateProps)
-	if propsJSON == nil {
-		propsJSON = []byte(`{}`)
-	}
-
-	repoRule, err := qtx.CreateRule(ctx, repository.CreateRuleParams{
-		ID:             ruleID,
-		SynapseID:      synapseID,
-		ActionType:     rule.ActionType,
-		ConditionJson:  condJSON,
-		TemplateType:   rule.TemplateType,
-		TemplateDomain: rule.TemplateDomain,
-		TemplateProps:  propsJSON,
-	})
+	repoRule, err := qtx.CreateRule(ctx, rule.ToCreateParams(ruleID, synapseID))
 	if err != nil {
 		return "", newServiceError(ErrCreatingRule, err)
 	}
 
 	for _, et := range rule.EventTypes {
-		if err := qtx.AddRuleEventType(ctx, repository.AddRuleEventTypeParams{
-			RuleID:    ruleID,
-			EventType: et,
-		}); err != nil {
+		binding := models.RuleEventType{RuleID: ruleID, EventType: et}
+		if err := qtx.AddRuleEventType(ctx, binding.ToCreateParams()); err != nil {
 			return "", newServiceErrorf(ErrAddingRuleEventType, err, "event type %s", et)
 		}
 	}
@@ -230,14 +211,7 @@ func (s *synapseService) GetSynapse(ctx context.Context, synapseID string) (mode
 func (s *synapseService) RegisterPattern(ctx context.Context, synapseID string, config models.PatternWatcherConfig) (string, error) {
 	id := uuid.New().String()
 
-	repoRow, err := s.q.CreatePatternWatcherConfig(ctx, repository.CreatePatternWatcherConfigParams{
-		ID:           id,
-		SynapseID:    synapseID,
-		Depth:        int32(config.Depth),
-		MinCount:     int32(config.MinCount),
-		DerivedTypes: config.DerivedTypes,
-		Domains:      config.Domains,
-	})
+	repoRow, err := s.q.CreatePatternWatcherConfig(ctx, config.ToCreateParams(id, synapseID))
 	if err != nil {
 		return "", newServiceError(ErrCreatingPatternWatcher, err)
 	}
@@ -277,40 +251,13 @@ func (s *synapseService) RegisterCompositionPattern(ctx context.Context, synapse
 
 	qtx := repository.New(tx)
 
-	propsJSON := models.MapToRawJSON(spec.DerivedTemplateProps)
-	if propsJSON == nil {
-		propsJSON = []byte(`{}`)
-	}
-
-	var twWithin pgtype.Int4
-	if spec.TimeWindowWithin != nil {
-		twWithin = pgtype.Int4{Int32: int32(*spec.TimeWindowWithin), Valid: true}
-	}
-	var twUnit pgtype.Text
-	if spec.TimeWindowUnit != nil {
-		twUnit = pgtype.Text{String: *spec.TimeWindowUnit, Valid: true}
-	}
-
-	repoSpec, err := qtx.CreateCompositionSpec(ctx, repository.CreateCompositionSpecParams{
-		CompositionID:         compositionID,
-		SynapseID:             synapseID,
-		TimeWindowWithin:      twWithin,
-		TimeWindowUnit:        twUnit,
-		DerivedTemplateType:   spec.DerivedTemplateType,
-		DerivedTemplateDomain: spec.DerivedTemplateDomain,
-		DerivedTemplateProps:  propsJSON,
-	})
+	repoSpec, err := qtx.CreateCompositionSpec(ctx, spec.ToCreateParams(compositionID, synapseID))
 	if err != nil {
 		return "", newServiceError(ErrCreatingComposition, err)
 	}
 
 	for _, rp := range spec.RequiredPatterns {
-		if err := qtx.AddCompositionRequiredPattern(ctx, repository.AddCompositionRequiredPatternParams{
-			CompositionID:  compositionID,
-			EventType:      rp.EventType,
-			EventDomain:    rp.EventDomain,
-			MinOccurrences: int32(rp.MinOccurrences),
-		}); err != nil {
+		if err := qtx.AddCompositionRequiredPattern(ctx, rp.ToCreateParams(compositionID)); err != nil {
 			return "", newServiceErrorf(ErrAddingRequiredPattern, err, "%s/%s", rp.EventType, rp.EventDomain)
 		}
 	}

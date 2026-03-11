@@ -9,6 +9,7 @@ import (
 	"github.com/nats-io/nats.go"
 
 	en "github.com/jtomasevic/synapse/pkg/event_network"
+	"github.com/jtomasevic/synapse/pkg/service/event_bus"
 	"github.com/jtomasevic/synapse/pkg/storage/repository"
 )
 
@@ -108,9 +109,9 @@ func (rm *runtimeManager) loadFromDB(ctx context.Context, q repository.Querier, 
 	}
 
 	// Build a NATSPublisher if a NATS connection is available.
-	var pub *NATSPublisher
+	var pub *event_bus.NATSPublisher
 	if rm.natsConn != nil {
-		pub = NewNATSPublisher(rm.natsConn, synapseID)
+		pub = event_bus.NewNATSPublisher(rm.natsConn, synapseID)
 	}
 
 	patternConfigs := make([]en.PatternConfig, 0, len(dbPatterns))

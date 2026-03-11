@@ -460,6 +460,29 @@ func (r Rule) ToRepo() repository.Rule {
 	}
 }
 
+// ToCreateParams converts a Rule to the sqlc params struct for insertion.
+// Fields that default to empty JSON when nil are handled here so callers
+// don't need to worry about nil-safe marshalling.
+func (r Rule) ToCreateParams(id, synapseID string) repository.CreateRuleParams {
+	condJSON := mapToRawJSON(r.ConditionJSON)
+	if condJSON == nil {
+		condJSON = []byte(`{}`)
+	}
+	propsJSON := mapToRawJSON(r.TemplateProps)
+	if propsJSON == nil {
+		propsJSON = []byte(`{}`)
+	}
+	return repository.CreateRuleParams{
+		ID:             id,
+		SynapseID:      synapseID,
+		ActionType:     r.ActionType,
+		ConditionJson:  condJSON,
+		TemplateType:   r.TemplateType,
+		TemplateDomain: r.TemplateDomain,
+		TemplateProps:  propsJSON,
+	}
+}
+
 // =========================================================================
 // RuleEventType
 // =========================================================================
@@ -473,6 +496,14 @@ func RuleEventTypeFromRepo(r repository.RuleEventType) RuleEventType {
 
 func (ret RuleEventType) ToRepo() repository.RuleEventType {
 	return repository.RuleEventType{
+		RuleID:    ret.RuleID,
+		EventType: ret.EventType,
+	}
+}
+
+// ToCreateParams converts a RuleEventType to the sqlc params struct for insertion.
+func (ret RuleEventType) ToCreateParams() repository.AddRuleEventTypeParams {
+	return repository.AddRuleEventTypeParams{
 		RuleID:    ret.RuleID,
 		EventType: ret.EventType,
 	}
@@ -503,6 +534,19 @@ func (pw PatternWatcherConfig) ToRepo() repository.PatternWatcherConfig {
 		DerivedTypes: pw.DerivedTypes,
 		Domains:      pw.Domains,
 		CreatedAt:    pw.CreatedAt,
+	}
+}
+
+// ToCreateParams converts a PatternWatcherConfig to the sqlc params struct
+// for insertion.
+func (pw PatternWatcherConfig) ToCreateParams(id, synapseID string) repository.CreatePatternWatcherConfigParams {
+	return repository.CreatePatternWatcherConfigParams{
+		ID:           id,
+		SynapseID:    synapseID,
+		Depth:        int32(pw.Depth),
+		MinCount:     int32(pw.MinCount),
+		DerivedTypes: pw.DerivedTypes,
+		Domains:      pw.Domains,
 	}
 }
 
@@ -549,6 +593,25 @@ func (cs CompositionSpec) ToRepo() repository.CompositionSpec {
 	}
 }
 
+// ToCreateParams converts a CompositionSpec to the sqlc params struct for
+// insertion. The compositionID and synapseID are passed explicitly because
+// they are assigned by the service layer at creation time.
+func (cs CompositionSpec) ToCreateParams(compositionID, synapseID string) repository.CreateCompositionSpecParams {
+	propsJSON := mapToRawJSON(cs.DerivedTemplateProps)
+	if propsJSON == nil {
+		propsJSON = []byte(`{}`)
+	}
+	return repository.CreateCompositionSpecParams{
+		CompositionID:         compositionID,
+		SynapseID:             synapseID,
+		TimeWindowWithin:      ptrToPgtypeInt4(cs.TimeWindowWithin),
+		TimeWindowUnit:        ptrToPgtypeText(cs.TimeWindowUnit),
+		DerivedTemplateType:   cs.DerivedTemplateType,
+		DerivedTemplateDomain: cs.DerivedTemplateDomain,
+		DerivedTemplateProps:  propsJSON,
+	}
+}
+
 // =========================================================================
 // CompositionRequiredPattern
 // =========================================================================
@@ -565,6 +628,18 @@ func CompositionRequiredPatternFromRepo(r repository.CompositionRequiredPattern)
 func (crp CompositionRequiredPattern) ToRepo() repository.CompositionRequiredPattern {
 	return repository.CompositionRequiredPattern{
 		CompositionID:  crp.CompositionID,
+		EventType:      crp.EventType,
+		EventDomain:    crp.EventDomain,
+		MinOccurrences: int32(crp.MinOccurrences),
+	}
+}
+
+// ToCreateParams converts a CompositionRequiredPattern to the sqlc params
+// struct for insertion. The compositionID is passed explicitly because it
+// is assigned at creation time.
+func (crp CompositionRequiredPattern) ToCreateParams(compositionID string) repository.AddCompositionRequiredPatternParams {
+	return repository.AddCompositionRequiredPatternParams{
+		CompositionID:  compositionID,
 		EventType:      crp.EventType,
 		EventDomain:    crp.EventDomain,
 		MinOccurrences: int32(crp.MinOccurrences),
