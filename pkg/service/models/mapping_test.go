@@ -860,3 +860,118 @@ func TestCompositionMatchLog_RoundTrip_NilDerivedEvent(t *testing.T) {
 	assert.False(t, back.DerivedEventID.Valid)
 	assert.Nil(t, back.Patterns)
 }
+
+// =========================================================================
+// ToCreateParams tests
+// =========================================================================
+
+func TestRule_ToCreateParams(t *testing.T) {
+	rule := Rule{
+		ActionType:     "derive_event",
+		ConditionJSON:  map[string]any{"field": "value"},
+		TemplateType:   "alert",
+		TemplateDomain: "security",
+		TemplateProps:  map[string]any{"severity": "high"},
+	}
+
+	params := rule.ToCreateParams("rule-42", "syn-1")
+
+	assert.Equal(t, "rule-42", params.ID)
+	assert.Equal(t, "syn-1", params.SynapseID)
+	assert.Equal(t, "derive_event", params.ActionType)
+	assert.Equal(t, "alert", params.TemplateType)
+	assert.Equal(t, "security", params.TemplateDomain)
+	assert.JSONEq(t, `{"field":"value"}`, string(params.ConditionJson))
+	assert.JSONEq(t, `{"severity":"high"}`, string(params.TemplateProps))
+}
+
+func TestRule_ToCreateParams_NilMaps(t *testing.T) {
+	rule := Rule{
+		ActionType:     "derive_event",
+		TemplateType:   "alert",
+		TemplateDomain: "security",
+	}
+
+	params := rule.ToCreateParams("rule-1", "syn-1")
+
+	assert.Equal(t, `{}`, string(params.ConditionJson))
+	assert.Equal(t, `{}`, string(params.TemplateProps))
+}
+
+func TestRuleEventType_ToCreateParams(t *testing.T) {
+	ret := RuleEventType{RuleID: "rule-7", EventType: "tremor"}
+	params := ret.ToCreateParams()
+
+	assert.Equal(t, "rule-7", params.RuleID)
+	assert.Equal(t, "tremor", params.EventType)
+}
+
+func TestPatternWatcherConfig_ToCreateParams(t *testing.T) {
+	pw := PatternWatcherConfig{
+		Depth:        3,
+		MinCount:     5,
+		DerivedTypes: []string{"alert"},
+		Domains:      []string{"geology"},
+	}
+
+	params := pw.ToCreateParams("pw-1", "syn-1")
+
+	assert.Equal(t, "pw-1", params.ID)
+	assert.Equal(t, "syn-1", params.SynapseID)
+	assert.Equal(t, int32(3), params.Depth)
+	assert.Equal(t, int32(5), params.MinCount)
+	assert.Equal(t, []string{"alert"}, params.DerivedTypes)
+	assert.Equal(t, []string{"geology"}, params.Domains)
+}
+
+func TestCompositionSpec_ToCreateParams(t *testing.T) {
+	tw := 30
+	unit := "seconds"
+	spec := CompositionSpec{
+		TimeWindowWithin:      &tw,
+		TimeWindowUnit:        &unit,
+		DerivedTemplateType:   "catastrophic",
+		DerivedTemplateDomain: "nature",
+		DerivedTemplateProps:  map[string]any{"level": "critical"},
+	}
+
+	params := spec.ToCreateParams("comp-1", "syn-1")
+
+	assert.Equal(t, "comp-1", params.CompositionID)
+	assert.Equal(t, "syn-1", params.SynapseID)
+	assert.True(t, params.TimeWindowWithin.Valid)
+	assert.Equal(t, int32(30), params.TimeWindowWithin.Int32)
+	assert.True(t, params.TimeWindowUnit.Valid)
+	assert.Equal(t, "seconds", params.TimeWindowUnit.String)
+	assert.Equal(t, "catastrophic", params.DerivedTemplateType)
+	assert.Equal(t, "nature", params.DerivedTemplateDomain)
+	assert.JSONEq(t, `{"level":"critical"}`, string(params.DerivedTemplateProps))
+}
+
+func TestCompositionSpec_ToCreateParams_NilOptionals(t *testing.T) {
+	spec := CompositionSpec{
+		DerivedTemplateType:   "alert",
+		DerivedTemplateDomain: "domain",
+	}
+
+	params := spec.ToCreateParams("comp-2", "syn-2")
+
+	assert.False(t, params.TimeWindowWithin.Valid)
+	assert.False(t, params.TimeWindowUnit.Valid)
+	assert.Equal(t, `{}`, string(params.DerivedTemplateProps))
+}
+
+func TestCompositionRequiredPattern_ToCreateParams(t *testing.T) {
+	crp := CompositionRequiredPattern{
+		EventType:      "tremor",
+		EventDomain:    "geology",
+		MinOccurrences: 5,
+	}
+
+	params := crp.ToCreateParams("comp-1")
+
+	assert.Equal(t, "comp-1", params.CompositionID)
+	assert.Equal(t, "tremor", params.EventType)
+	assert.Equal(t, "geology", params.EventDomain)
+	assert.Equal(t, int32(5), params.MinOccurrences)
+}

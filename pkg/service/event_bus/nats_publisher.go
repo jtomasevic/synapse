@@ -1,4 +1,4 @@
-package service
+package event_bus
 
 import (
 	"encoding/json"
