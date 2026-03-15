@@ -1,8 +1,7 @@
-// Package client provides a Go SDK for consuming Synapse notifications
-// published over NATS. Clients subscribe to condition, pattern, and/or
-// composition events for a specific synapse instance.
+// Package client provides a Go SDK for producing events into and consuming
+// notifications from Synapse over NATS.
 //
-// Usage:
+// Consuming notifications:
 //
 //	c, _ := client.New("nats://localhost:4222")
 //	defer c.Close()
@@ -11,9 +10,23 @@
 //	    log.Printf("Rule %s fired", e.RuleID)
 //	})
 //
-//	c.OnAll("synapse-id", func(raw []byte, msgType string) {
-//	    log.Printf("got %s: %s", msgType, raw)
+// Ingesting events (fire-and-forget):
+//
+//	c.Ingest("synapse-id", client.IngestEvent{
+//	    EventType: "cpu", EventDomain: "infra",
 //	})
+//
+// Ingesting events (synchronous, returns event ID):
+//
+//	id, err := c.IngestSync("synapse-id", client.IngestEvent{
+//	    EventType: "cpu", EventDomain: "infra",
+//	}, 5*time.Second)
+//
+// Synapse-bound client (no synapseID on every call):
+//
+//	syn := c.ForSynapse("synapse-id")
+//	syn.Ingest(client.IngestEvent{EventType: "cpu", EventDomain: "infra"})
+//	syn.OnCondition(func(e client.ConditionEvent) { ... })
 package client
 
 import (
@@ -51,7 +64,9 @@ func (c *Client) Close() {
 	}
 }
 
-// --- Event types ---
+// ===========================================================================
+// Notification types (outbound, received by subscribers)
+// ===========================================================================
 
 // EventSummary is a compact event reference.
 type EventSummary struct {
@@ -95,7 +110,27 @@ type CompositionEvent struct {
 	PatternCount   int       `json:"pattern_count"`
 }
 
-// --- Typed subscriptions ---
+// ===========================================================================
+// Ingest types (inbound, sent by producers)
+// ===========================================================================
+
+// IngestEvent is the payload for publishing an event into a synapse via NATS.
+type IngestEvent struct {
+	EventType   string         `json:"event_type"`
+	EventDomain string         `json:"event_domain"`
+	Properties  map[string]any `json:"properties,omitempty"`
+	Timestamp   *time.Time     `json:"timestamp,omitempty"`
+}
+
+// IngestResult is the response from a synchronous ingest (request/reply).
+type IngestResult struct {
+	EventID string `json:"event_id,omitempty"`
+	Error   string `json:"error,omitempty"`
+}
+
+// ===========================================================================
+// Notification subscriptions (outbound)
+// ===========================================================================
 
 // OnCondition subscribes to condition-satisfied events for the given synapse.
 // Returns a Subscription that can be used to unsubscribe.
@@ -139,4 +174,45 @@ func (c *Client) OnAll(synapseID string, handler func(raw []byte, msgType string
 	return c.conn.Subscribe(subject, func(msg *nats.Msg) {
 		handler(msg.Data, msg.Subject)
 	})
+}
+
+// ===========================================================================
+// Event ingestion (inbound)
+// ===========================================================================
+
+// Ingest publishes an event for ingestion via NATS (fire-and-forget).
+// The event is processed asynchronously; no response is returned.
+func (c *Client) Ingest(synapseID string, event IngestEvent) error {
+	subject := fmt.Sprintf("synapse.%s.ingest", synapseID)
+	data, err := json.Marshal(event)
+	if err != nil {
+		return fmt.Errorf("synapse client: marshal ingest event: %w", err)
+	}
+	return c.conn.Publish(subject, data)
+}
+
+// IngestSync publishes an event and waits for a response (request/reply).
+// Returns the assigned event ID or an error.
+func (c *Client) IngestSync(synapseID string, event IngestEvent, timeout time.Duration) (string, error) {
+	subject := fmt.Sprintf("synapse.%s.ingest", synapseID)
+	data, err := json.Marshal(event)
+	if err != nil {
+		return "", fmt.Errorf("synapse client: marshal ingest event: %w", err)
+	}
+
+	msg, err := c.conn.Request(subject, data, timeout)
+	if err != nil {
+		return "", fmt.Errorf("synapse client: ingest request: %w", err)
+	}
+
+	var result IngestResult
+	if err := json.Unmarshal(msg.Data, &result); err != nil {
+		return "", fmt.Errorf("synapse client: unmarshal ingest response: %w", err)
+	}
+
+	if result.Error != "" {
+		return "", fmt.Errorf("synapse client: ingest rejected: %s", result.Error)
+	}
+
+	return result.EventID, nil
 }
