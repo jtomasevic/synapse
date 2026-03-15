@@ -51,7 +51,7 @@ info:
 
     The consumer uses a NATS queue group (`synapse-ingest`) so multiple
     API instances share the ingestion load automatically.
-  version: "1.3.0"
+  version: "1.4.0"
   contact:
     name: Synapse
     url: https://github.com/jtomasevic/synapse
@@ -283,6 +283,52 @@ paths:
                 $ref: "#/components/schemas/GetCompositionResponse"
         "404":
           $ref: "#/components/responses/NotFound"
+
+
+  # --- Blueprint (apply) ---------------------------------------------------
+  /synapses/{synapseID}/blueprint:
+    post:
+      operationId: applyBlueprint
+      summary: Apply a declarative blueprint to a synapse
+      description: |
+        Accepts a YAML or JSON blueprint that describes rules, patterns, and
+        compositions. All resources are created atomically and the generated
+        IDs are returned.
+      tags: [Blueprints]
+      parameters:
+        - $ref: "#/components/parameters/synapseID"
+      requestBody:
+        required: true
+        content:
+          application/x-yaml:
+            schema:
+              type: string
+              description: YAML blueprint document
+            example: |
+              name: earthquake-early-warning
+              rules:
+                - name: r_tremors_burst
+                  event_types: [minor_tremors]
+                  template_type: high_frequency_of_minor_tremors
+                  template_domain: geology
+              patterns:
+                - depth: 4
+                  min_count: 3
+                  derived_types: [high_frequency_of_minor_tremors]
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Blueprint"
+      responses:
+        "201":
+          description: Blueprint applied successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApplyBlueprintResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
 
   # --- Events (ingest + graph queries) -----------------------------------
   /synapses/{synapseID}/events:
@@ -774,6 +820,122 @@ components:
           type: string
           format: date-time
           example: "2026-02-10T14:30:00Z"
+
+
+    Blueprint:
+      type: object
+      required: [name]
+      description: Declarative configuration for a synapse (rules, patterns, compositions)
+      properties:
+        name:
+          type: string
+          example: "earthquake-early-warning"
+        rules:
+          type: array
+          items:
+            $ref: "#/components/schemas/BlueprintRule"
+        patterns:
+          type: array
+          items:
+            $ref: "#/components/schemas/BlueprintPattern"
+        compositions:
+          type: array
+          items:
+            $ref: "#/components/schemas/BlueprintComposition"
+
+    BlueprintRule:
+      type: object
+      required: [event_types, template_type, template_domain]
+      properties:
+        name:
+          type: string
+          example: "r_tremors_burst"
+        event_types:
+          type: array
+          items:
+            type: string
+          example: ["minor_tremors"]
+        template_type:
+          type: string
+          example: "high_frequency_of_minor_tremors"
+        template_domain:
+          type: string
+          example: "geology"
+        template_props:
+          type: object
+          additionalProperties: true
+        condition:
+          description: Condition token list (same format as condition_json)
+          oneOf:
+            - type: array
+              items:
+                type: object
+            - type: object
+
+    BlueprintPattern:
+      type: object
+      required: [depth, min_count]
+      properties:
+        depth:
+          type: integer
+          example: 4
+        min_count:
+          type: integer
+          example: 3
+        derived_types:
+          type: array
+          items:
+            type: string
+          example: ["high_frequency_of_minor_tremors"]
+        domains:
+          type: array
+          items:
+            type: string
+
+    BlueprintComposition:
+      type: object
+      required: [derived_template_type, derived_template_domain, required_patterns]
+      properties:
+        required_patterns:
+          type: array
+          items:
+            $ref: "#/components/schemas/CompositionRequiredPatternDTO"
+        time_window_within:
+          type: integer
+          nullable: true
+          example: 8
+        time_window_unit:
+          type: string
+          nullable: true
+          example: "hour"
+        derived_template_type:
+          type: string
+          example: "potential_natural_catastrophic"
+        derived_template_domain:
+          type: string
+          example: "natural_disaster_warning"
+        derived_template_props:
+          type: object
+          additionalProperties: true
+
+    ApplyBlueprintResponse:
+      type: object
+      properties:
+        rule_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        pattern_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        composition_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
 
     # --- NATS notification schemas (for documentation) ---
 

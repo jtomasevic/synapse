@@ -124,3 +124,11 @@ type DomainEventResponse struct {
 	Properties  map[string]any `json:"properties,omitempty"`
 	Timestamp   string         `json:"timestamp"`
 }
+
+// --- Blueprint ---
+
+type ApplyBlueprintResponse struct {
+	RuleIDs        []string `json:"rule_ids"`
+	PatternIDs     []string `json:"pattern_ids"`
+	CompositionIDs []string `json:"composition_ids"`
+}

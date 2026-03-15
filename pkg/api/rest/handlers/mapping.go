@@ -1,6 +1,9 @@
 package handlers
 
-import "github.com/jtomasevic/synapse/pkg/service/models"
+import (
+	"github.com/jtomasevic/synapse/pkg/service/blueprint"
+	"github.com/jtomasevic/synapse/pkg/service/models"
+)
 
 // =========================================================================
 // Request DTO → Service Model  (inbound)
@@ -207,4 +210,17 @@ func DomainEventsToResponse(events []models.DomainEvent) []DomainEventResponse {
 		out[i] = DomainEventToResponse(e)
 	}
 	return out
+}
+
+// =========================================================================
+// Blueprint result → Response DTO
+// =========================================================================
+
+// BlueprintResultToResponse converts a BlueprintResult to a response DTO.
+func BlueprintResultToResponse(r blueprint.BlueprintResult) ApplyBlueprintResponse {
+	return ApplyBlueprintResponse{
+		RuleIDs:        r.RuleIDs,
+		PatternIDs:     r.PatternIDs,
+		CompositionIDs: r.CompositionIDs,
+	}
 }

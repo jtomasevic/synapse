@@ -6,6 +6,7 @@
 package models
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
@@ -172,6 +173,7 @@ type Rule struct {
 	SynapseID      string
 	ActionType     string
 	ConditionJSON  map[string]any // deserialized condition token list
+	ConditionRaw   json.RawMessage // raw JSON bytes for conditions (takes precedence over ConditionJSON in ToCreateParams)
 	TemplateType   string
 	TemplateDomain string
 	TemplateProps  map[string]any

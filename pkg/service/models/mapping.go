@@ -464,7 +464,10 @@ func (r Rule) ToRepo() repository.Rule {
 // Fields that default to empty JSON when nil are handled here so callers
 // don't need to worry about nil-safe marshalling.
 func (r Rule) ToCreateParams(id, synapseID string) repository.CreateRuleParams {
-	condJSON := mapToRawJSON(r.ConditionJSON)
+	condJSON := r.ConditionRaw
+	if len(condJSON) == 0 {
+		condJSON = mapToRawJSON(r.ConditionJSON)
+	}
 	if condJSON == nil {
 		condJSON = []byte(`{}`)
 	}

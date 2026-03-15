@@ -20,6 +20,7 @@ import (
 	"github.com/nats-io/nats.go"
 
 	en "github.com/jtomasevic/synapse/pkg/event_network"
+	"github.com/jtomasevic/synapse/pkg/service/blueprint"
 	"github.com/jtomasevic/synapse/pkg/service/event_bus"
 	"github.com/jtomasevic/synapse/pkg/service/models"
 	"github.com/jtomasevic/synapse/pkg/storage/repository"
@@ -44,6 +45,10 @@ type SynapseService interface {
 	GetCompositionPattern(ctx context.Context, compositionID string) (models.CompositionSpec, error)
 	GetSynapsePattternCompositions(ctx context.Context, synapseID string) ([]models.CompositionSpec, error)
 
+
+	// ApplyBlueprint applies a declarative blueprint to a synapse, creating
+	// rules, patterns, and compositions in one call.
+	ApplyBlueprint(ctx context.Context, synapseID string, bp blueprint.Blueprint) (blueprint.BlueprintResult, error)
 
 	// IngestEvent adds an event to the synapse. The event is persisted to PG,
 	// then processed by the in-memory runtime (rules fire, derived events
@@ -360,6 +365,14 @@ func (s *synapseService) GetSynapsePattternCompositions(ctx context.Context, syn
 		specs[i] = models.CompositionSpecFromRepoWithPatterns(r, patterns)
 	}
 	return specs, nil
+}
+
+// ---------------------------------------------------------------------------
+// ApplyBlueprint
+// ---------------------------------------------------------------------------
+
+func (s *synapseService) ApplyBlueprint(ctx context.Context, synapseID string, bp blueprint.Blueprint) (blueprint.BlueprintResult, error) {
+	return blueprint.Apply(ctx, s, synapseID, bp)
 }
 
 // ===========================================================================

@@ -39,6 +39,7 @@ func (h *Handlers) Routes() []Route {
 	all = append(all, h.PatternRoutes()...)
 	all = append(all, h.CompositionRoutes()...)
 	all = append(all, h.EventRoutes()...)
+	all = append(all, h.BlueprintRoutes()...)
 	return all
 }
 

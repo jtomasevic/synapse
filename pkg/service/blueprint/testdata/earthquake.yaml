@@ -1,0 +1,81 @@
+name: earthquake-early-warning
+
+rules:
+  - name: r_animal_unexpected
+    event_types:
+      - zebras_migration
+      - unusual_bird_behavior
+    template_type: multiple_animal_unexpected_behavior
+    template_domain: animal_observation
+    condition:
+      - kind: term
+        term:
+          kind: has_peers
+          event_type: unusual_bird_behavior
+          conditions:
+            max_depth: 0
+            counter:
+              how_many: 1
+              how_many_or_more: true
+            time_window:
+              within: 8
+              time_unit: hour
+      - kind: op
+        op: or
+      - kind: term
+        term:
+          kind: has_peers
+          event_type: zebras_migration
+          conditions:
+            max_depth: 0
+            counter:
+              how_many: 1
+              how_many_or_more: true
+            time_window:
+              within: 8
+              time_unit: hour
+
+  - name: r_tremors_burst
+    event_types:
+      - minor_tremors
+    template_type: high_frequency_of_minor_tremors
+    template_domain: geology
+    condition:
+      - kind: term
+        term:
+          kind: has_peers
+          event_type: minor_tremors
+          conditions:
+            max_depth: 0
+            counter:
+              how_many: 5
+              how_many_or_more: true
+            time_window:
+              within: 8
+              time_unit: hour
+
+patterns:
+  - depth: 4
+    min_count: 3
+    derived_types:
+      - multiple_animal_unexpected_behavior
+  - depth: 4
+    min_count: 3
+    derived_types:
+      - high_frequency_of_minor_tremors
+
+compositions:
+  - required_patterns:
+      - event_type: multiple_animal_unexpected_behavior
+        event_domain: animal_observation
+        min_occurrences: 2
+      - event_type: high_frequency_of_minor_tremors
+        event_domain: geology
+        min_occurrences: 5
+    time_window_within: 8
+    time_window_unit: hour
+    derived_template_type: potential_natural_catastrophic
+    derived_template_domain: natural_disaster_warning
+    derived_template_props:
+      composition_id: cross-domain-natural-disaster
+      meaning: "Both domain patterns (geology + animal observation) confirmed simultaneously."
