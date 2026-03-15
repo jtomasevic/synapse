@@ -43,3 +43,24 @@ type CompositionMessage struct {
 	DerivedEventID string    `json:"derived_event_id"`
 	PatternCount   int       `json:"pattern_count"`
 }
+
+// ---------------------------------------------------------------------------
+// Inbound ingestion messages (NATS -> Synapse)
+// ---------------------------------------------------------------------------
+
+// IngestMessage is published by external producers to ingest an event into
+// a synapse via NATS. The synapse ID is encoded in the subject
+// (synapse.{synapseID}.ingest), not in the payload.
+type IngestMessage struct {
+	EventType   string         `json:"event_type"`
+	EventDomain string         `json:"event_domain"`
+	Properties  map[string]any `json:"properties,omitempty"`
+	Timestamp   *time.Time     `json:"timestamp,omitempty"`
+}
+
+// IngestResponse is sent back on the NATS reply subject (request/reply
+// pattern). Fire-and-forget producers can ignore it.
+type IngestResponse struct {
+	EventID string `json:"event_id,omitempty"`
+	Error   string `json:"error,omitempty"`
+}

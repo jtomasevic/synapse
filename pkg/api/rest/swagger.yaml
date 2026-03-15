@@ -23,7 +23,35 @@ info:
     c.OnPattern(synapseID, func(e client.PatternEvent) { ... })
     c.OnComposition(synapseID, func(e client.CompositionEvent) { ... })
     ```
-  version: "1.2.0"
+
+    ## Streaming Ingest via NATS
+
+    Events can also be ingested over NATS instead of REST, enabling
+    high-throughput, low-latency pipelines from ML producers.
+
+    **NATS subject:** `synapse.{synapseID}.ingest`
+
+    The payload is a JSON object with fields: `event_type` (required),
+    `event_domain`, `properties`, and `timestamp`.
+
+    **Fire-and-forget** (no reply):
+    ```go
+    c.Ingest(synapseID, client.IngestEvent{
+        EventType: "cpu", EventDomain: "infra",
+        Properties: map[string]any{"host": "srv-01"},
+    })
+    ```
+
+    **Synchronous** (request/reply, returns event ID):
+    ```go
+    id, err := c.IngestSync(synapseID, client.IngestEvent{
+        EventType: "cpu", EventDomain: "infra",
+    }, 5*time.Second)
+    ```
+
+    The consumer uses a NATS queue group (`synapse-ingest`) so multiple
+    API instances share the ingestion load automatically.
+  version: "1.3.0"
   contact:
     name: Synapse
     url: https://github.com/jtomasevic/synapse
