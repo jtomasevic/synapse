@@ -14,6 +14,7 @@ type SynapseRuntime struct {
 	rulesByType        map[EventType][]Rule
 	PatternWatcher     []PatternObserver
 	ConditionListeners []ConditionListener
+	NegationWatchers   []*NegationWatcher
 }
 
 func (s *SynapseRuntime) RegisterRule(eventType EventType, rule Rule) {
@@ -24,6 +25,13 @@ func (s *SynapseRuntime) RegisterRule(eventType EventType, rule Rule) {
 
 func (s *SynapseRuntime) AddConditionListener(l ConditionListener) {
 	s.ConditionListeners = append(s.ConditionListeners, l)
+}
+
+// AddNegationWatcher registers a NegationWatcher that will be evaluated
+// on every Ingest call. Negation watchers fire derived events when an
+// expected event type does not appear within a timeout after a trigger.
+func (s *SynapseRuntime) AddNegationWatcher(w *NegationWatcher) {
+	s.NegationWatchers = append(s.NegationWatchers, w)
 }
 
 func (s *SynapseRuntime) RegisterRuleForTypes(eventTypes []EventType, rule Rule) {
@@ -95,14 +103,42 @@ func (s *SynapseRuntime) Ingest(event Event) (EventID, error) {
 	}
 
 	for _, derivedEvent := range derivedEvents {
-		//fmt.Println("-----------")
-		//j, _ := json.Marshal(s.Memory.ListMotifs())
-		//fmt.Println(string(j))
-		//fmt.Println("-----------")
-
 		s.lookForPatterns(buildMotifKey(derivedEvent,
 			contributedEvents[derivedEvent.ID],
 			rulesId[derivedEvent.ID]))
+	}
+
+	// 3) Negation watchers: check for absence-based timeouts.
+	//    All events from this round (raw + derived) are passed to each watcher.
+	//    logicalNow = latest timestamp seen, serving as the event-time clock.
+	if len(s.NegationWatchers) > 0 {
+		allEvents := make([]Event, 0, 1+len(derivedEvents))
+		allEvents = append(allEvents, event)
+		allEvents = append(allEvents, derivedEvents...)
+
+		logicalNow := event.Timestamp
+		for _, e := range derivedEvents {
+			if e.Timestamp.After(logicalNow) {
+				logicalNow = e.Timestamp
+			}
+		}
+
+		for _, nw := range s.NegationWatchers {
+			fired := nw.Process(allEvents, logicalNow)
+			for _, f := range fired {
+				derived, err := s.materializeFromTemplate(
+					nw.Spec.DerivedTemplate,
+					[]Event{f.trigger},
+					"negation:"+string(nw.Spec.TriggerType)+"->!"+string(nw.Spec.ExpectedType),
+				)
+				if err != nil {
+					return uuid.UUID{}, err
+				}
+				if nw.Listener != nil {
+					nw.Listener.OnNegationFired(f.trigger, derived)
+				}
+			}
+		}
 	}
 
 	return event.ID, nil
